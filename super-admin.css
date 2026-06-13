@@ -256,6 +256,9 @@ body::before {
 .sa-sub-end { font-size: 0.8125rem; color: var(--sa-accent); margin-left: auto; }
 
 .sa-link-tools { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.sa-link-tools__warning { width: 100%; margin: 0; font-size: 0.8125rem; color: #f59e0b; }
+.sa-btn--disabled,
+.sa-btn:disabled { opacity: 0.45; pointer-events: none; cursor: not-allowed; }
 
 .sa-packages { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
 .sa-package-card { background: var(--sa-bg-elevated); border: 1px solid var(--sa-border); border-radius: var(--sa-radius-sm); padding: 20px; transition: border-color var(--sa-transition); position: relative; }

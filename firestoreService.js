@@ -10,7 +10,12 @@ import {
     where,
     serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-import { db, SITE_BASE_URL } from "./firebase-config.js";
+import { db } from "./firebase-config.js";
+import {
+    getBookingUrl,
+    getAdminUrl,
+    getWhatsAppBookingMessage
+} from "./linkService.js";
 import { isCustomerBookingAllowed, getCustomerBlockMessage } from "./subscriptionService.js";
 
 const BARBERS = "berberler";
@@ -225,16 +230,15 @@ export async function removeBarber(slug) {
 }
 
 export function getCustomerLink(slug) {
-    return `${SITE_BASE_URL}/randevu.html?dukkan=${slug}`;
+    return getBookingUrl(slug);
 }
 
 export function getAdminLoginLink(slug) {
-    return `${SITE_BASE_URL}/admin.html?dukkan=${slug}`;
+    return getAdminUrl(slug);
 }
 
-export function getWhatsAppMessage(slug, barberName) {
-    const link = getCustomerLink(slug);
-    return `Merhaba 👋\n\nOnline randevu oluşturmak için aşağıdaki bağlantıya tıklayabilirsiniz:\n\n${link}`;
+export function getWhatsAppMessage(slug) {
+    return getWhatsAppBookingMessage(slug);
 }
 
 /**

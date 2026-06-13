@@ -1,8 +1,10 @@
 import {
     fetchAllBarbers, fetchBarber, createBarber, updateBarber,
-    toggleBarberStatus, extendSubscription, removeBarber, normalizeSlug,
-    getCustomerLink, getAdminLoginLink, getWhatsAppMessage, formatDate
+    toggleBarberStatus, extendSubscription, removeBarber, normalizeSlug, formatDate
 } from "./firestoreService.js";
+import {
+    getBookingUrl, getAdminUrl, getWhatsAppBookingMessage
+} from "./linkService.js";
 import { serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import {
     getPendingBarbersPanelHtml,
@@ -422,6 +424,7 @@ function getPanelHtml() {
                         <span id="editSubEnd" class="sa-sub-end"></span>
                     </div>
                     <div class="sa-link-tools">
+                        <p id="editSlugWarning" class="sa-link-tools__warning" hidden>Bu dükkan için slug bulunamadı.</p>
                         <button type="button" class="sa-btn sa-btn--ghost" id="copyLinkBtn">🔗 Randevu Linki Kopyala</button>
                         <button type="button" class="sa-btn sa-btn--ghost" id="whatsappMsgBtn">💬 WhatsApp Mesajı</button>
                         <a class="sa-btn sa-btn--ghost" id="openAdminLink" href="#" target="_blank" rel="noopener">🔐 Berber Paneli</a>
@@ -698,8 +701,8 @@ function quickLinksHtml(b) {
     if (!b.slug) {
         return `<span class="sad-quick__disabled" title="Slug bulunamadı">⚠️ Slug yok</span>`;
     }
-    const adminUrl = escapeHtml(getAdminLoginLink(b.slug) + "&fromSuperAdmin=true");
-    const bookingUrl = escapeHtml(getCustomerLink(b.slug));
+    const adminUrl = escapeHtml((getAdminUrl(b.slug) || "#") + "&fromSuperAdmin=true");
+    const bookingUrl = escapeHtml(getBookingUrl(b.slug) || "#");
     return `<div class="sad-quick">
         <a href="${adminUrl}" target="_blank" rel="noopener noreferrer" class="sad-quick__btn sad-quick__btn--admin">⚙️ Admin</a>
         <a href="${bookingUrl}" target="_blank" rel="noopener noreferrer" class="sad-quick__btn sad-quick__btn--booking">📅 Randevu</a>
@@ -731,7 +734,7 @@ function rowHtml(b) {
         <td>${statusToggleBtn(b)}</td>
         <td><div class="sa-table__actions">
             <button class="sa-btn sa-btn--ghost" data-action="edit" data-slug="${b.slug}">Düzenle</button>
-            <button class="sa-btn sa-btn--ghost" data-action="copy" data-slug="${b.slug}">Kopyala</button>
+            <button class="sa-btn sa-btn--ghost" data-action="copy" data-slug="${b.slug}" ${!b.slug ? 'disabled title="Bu dükkan için slug bulunamadı."' : ""}>Kopyala</button>
             <button class="sa-btn sa-btn--danger" data-action="delete" data-slug="${b.slug}">Sil</button>
         </div></td>
     </tr>`;
@@ -760,7 +763,7 @@ function cardHtml(b) {
         <div class="sad-card__actions">
             ${statusToggleBtn(b)}
             <button class="sa-btn sa-btn--ghost" data-action="edit" data-slug="${b.slug}">Düzenle</button>
-            <button class="sa-btn sa-btn--ghost" data-action="copy" data-slug="${b.slug}">Kopyala</button>
+            <button class="sa-btn sa-btn--ghost" data-action="copy" data-slug="${b.slug}" ${!b.slug ? 'disabled title="Bu dükkan için slug bulunamadı."' : ""}>Kopyala</button>
             <button class="sa-btn sa-btn--danger" data-action="delete" data-slug="${b.slug}">Sil</button>
         </div>
     </div>`;
@@ -846,6 +849,29 @@ function sortBarbersCache() {
     );
 }
 
+function updateEditLinkTools(slug) {
+    const hasSlug = Boolean(String(slug || "").trim());
+    const copyBtn = document.getElementById("copyLinkBtn");
+    const waBtn = document.getElementById("whatsappMsgBtn");
+    const adminLink = document.getElementById("openAdminLink");
+    const slugWarning = document.getElementById("editSlugWarning");
+
+    if (copyBtn) {
+        copyBtn.disabled = !hasSlug;
+        copyBtn.title = hasSlug ? "" : "Bu dükkan için slug bulunamadı.";
+    }
+    if (waBtn) {
+        waBtn.disabled = !hasSlug;
+        waBtn.title = hasSlug ? "" : "Bu dükkan için slug bulunamadı.";
+    }
+    if (adminLink) {
+        adminLink.href = getAdminUrl(slug) || "#";
+        adminLink.setAttribute("aria-disabled", hasSlug ? "false" : "true");
+        adminLink.classList.toggle("sa-btn--disabled", !hasSlug);
+    }
+    if (slugWarning) slugWarning.hidden = hasSlug;
+}
+
 function openEditModal(barber) {
     document.getElementById("editSlug").value = barber.slug;
     document.getElementById("editName").value = barber.name || "";
@@ -870,9 +896,7 @@ function openEditModal(barber) {
     const endDate = barber.subscriptionEndDate ? String(barber.subscriptionEndDate).slice(0, 10) : "";
     document.getElementById("editSubEndDate").value = endDate;
     updateEditSubStatusPreview(endDate);
-
-    const adminLink = document.getElementById("openAdminLink");
-    if (adminLink) adminLink.href = getAdminLoginLink(barber.slug);
+    updateEditLinkTools(barber.slug);
 
     document.getElementById("editModal").classList.add("open");
     // Popup açıkken arkadaki ana sayfanın kaymasını engelle
@@ -885,9 +909,18 @@ function closeEditModal() {
     document.body.style.overflow = "";
 }
 
-async function copyToClipboard(text) {
+async function copyToClipboard(text, toastMessage = "Panoya kopyalandı!") {
     await navigator.clipboard.writeText(text);
-    showToastFn("Panoya kopyalandı!");
+    showToastFn(toastMessage);
+}
+
+async function copyBookingLink(slug) {
+    const url = getBookingUrl(slug);
+    if (!url) {
+        showToastFn("Bu dükkan için slug bulunamadı.", "error");
+        return;
+    }
+    await copyToClipboard(url, "Randevu linki kopyalandı.");
 }
 
 function bindDashboardEvents() {
@@ -1138,7 +1171,7 @@ function bindPanelEvents(onLogout) {
             const barber = barbersCache.find(b => b.slug === slug) || await fetchBarber(slug);
             if (barber) openEditModal(barber);
         } else if (action === "copy") {
-            await copyToClipboard(getCustomerLink(slug));
+            await copyBookingLink(slug);
         } else if (action === "delete") {
             if (confirm("Bu berberi silmek istediğinize emin misiniz?")) {
                 await removeBarber(slug);
@@ -1226,15 +1259,26 @@ function bindPanelEvents(onLogout) {
         });
     });
 
+    document.getElementById("openAdminLink")?.addEventListener("click", (e) => {
+        const slug = document.getElementById("editSlug")?.value;
+        if (!getAdminUrl(slug)) {
+            e.preventDefault();
+            showToastFn("Bu dükkan için slug bulunamadı.", "error");
+        }
+    });
+
     document.getElementById("copyLinkBtn")?.addEventListener("click", () => {
-        copyToClipboard(getCustomerLink(document.getElementById("editSlug").value));
+        copyBookingLink(document.getElementById("editSlug").value);
     });
 
     document.getElementById("whatsappMsgBtn")?.addEventListener("click", () => {
-        copyToClipboard(getWhatsAppMessage(
-            document.getElementById("editSlug").value,
-            document.getElementById("editName").value
-        ));
+        const slug = document.getElementById("editSlug").value;
+        const message = getWhatsAppBookingMessage(slug);
+        if (!message) {
+            showToastFn("Bu dükkan için slug bulunamadı.", "error");
+            return;
+        }
+        copyToClipboard(message, "WhatsApp mesajı kopyalandı.");
     });
 
     document.getElementById("closeEditModal")?.addEventListener("click", closeEditModal);

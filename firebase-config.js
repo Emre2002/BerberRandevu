@@ -56,8 +56,6 @@ export function hasFirebaseConfig() {
     return Boolean(firebaseConfig.apiKey && firebaseConfig.projectId);
 }
 
-export const SITE_BASE_URL = window.location.origin;
-
 let app = null;
 let db = null;
 

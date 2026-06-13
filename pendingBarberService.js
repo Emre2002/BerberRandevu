@@ -1,10 +1,11 @@
 import {
     collection, addDoc, getDocs, getDoc, doc, updateDoc, query, orderBy, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-import { db, hasFirebaseConfig, SITE_BASE_URL } from "./firebase-config.js";
+import { db, hasFirebaseConfig } from "./firebase-config.js";
 import {
     createBarber, normalizeSlug, slugExists, usernameExists, getAdminLoginLink
 } from "./firestoreService.js";
+import { getAdminUrl } from "./linkService.js";
 import { getInitialTrialEndDate } from "./subscriptionService.js";
 
 const COLLECTION = "pendingBarbers";
@@ -191,7 +192,7 @@ export function buildWhatsAppApprovalLink(phone, { slug, username, password }) {
     if (wa.startsWith("0")) wa = "90" + wa.slice(1);
     else if (!wa.startsWith("90")) wa = "90" + wa;
 
-    const adminUrl = `${SITE_BASE_URL}/admin.html?dukkan=${slug}`;
+    const adminUrl = getAdminUrl(slug) || "";
     const text = `Merhaba.\n\nBerberRandevu başvurunuz onaylanmıştır.\n\nAdmin Panel:\n${adminUrl}\n\nKullanıcı Adınız:\n${username}\n\nŞifreniz:\n${password}`;
 
     return `https://wa.me/${wa}?text=${encodeURIComponent(text)}`;
