@@ -3,14 +3,14 @@ import { getFirestore } from "https://www.gstatic.com/firebasejs/10.7.1/firebase
 
 export const FIREBASE_CONFIG_STORAGE_KEY = "berberFirebaseConfig";
 
-const DEFAULT_CONFIG = {
-    apiKey: "",
-    authDomain: "",
-    projectId: "",
-    storageBucket: "",
-    messagingSenderId: "",
-    appId: "",
-    measurementId: ""
+export const firebaseConfig = {
+    apiKey: "AIzaSyBTPR4IrARQWvmN6eOMMouse3ipz0zcns0",
+    authDomain: "berberrandevu-20a3e.firebaseapp.com",
+    projectId: "berberrandevu-20a3e",
+    storageBucket: "berberrandevu-20a3e.appspot.com",
+    messagingSenderId: "22655326053",
+    appId: "1:22655326053:web:e0a116cabb6228363cf38c",
+    measurementId: "G-C0NKCG9TVQ"
 };
 
 function loadStoredConfig() {
@@ -26,12 +26,10 @@ function loadStoredConfig() {
 export function buildFirebaseConfig() {
     const stored = loadStoredConfig();
     if (stored?.apiKey) {
-        return { ...DEFAULT_CONFIG, ...stored };
+        return { ...firebaseConfig, ...stored };
     }
-    return { ...DEFAULT_CONFIG };
+    return { ...firebaseConfig };
 }
-
-export const firebaseConfig = buildFirebaseConfig();
 
 export function saveFirebaseConfig(config) {
     const cleaned = {
@@ -56,14 +54,5 @@ export function hasFirebaseConfig() {
     return Boolean(firebaseConfig.apiKey && firebaseConfig.projectId);
 }
 
-let app = null;
-let db = null;
-
-if (hasFirebaseConfig()) {
-    app = initializeApp(firebaseConfig);
-    db = getFirestore(app);
-} else {
-    console.warn("Firebase yapılandırması eksik. Yalnızca süper admin panelinden yapılandırılabilir.");
-}
-
-export { app, db };
+const app = initializeApp(firebaseConfig);
+export const db = getFirestore(app);
