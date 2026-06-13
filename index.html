@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Berberiniz için profesyonel online randevu sistemi. WhatsApp karmaşasını bitirin, müşterileriniz 7/24 randevu alsın.">
+    <title>BerberRandevu | Berberinizin Randevu Sistemi</title>
+    <script>
+        // GERİYE DÖNÜK DESTEK: Eski müşteri linkleri (index.html?dukkan=x) artık
+        // yeni randevu sayfasına yönlendirilir. Landing page parametreyle davranış değiştirmez.
+        (function () {
+            var params = new URLSearchParams(window.location.search);
+            var slug = params.get("dukkan") || params.get("randevu") || params.get("shop");
+            if (slug) {
+                window.location.replace("randevu.html?dukkan=" + encodeURIComponent(slug));
+            }
+        })();
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="landing.css">
+</head>
+<body>
+    <div id="saasRoot">
+    <div class="lp-bg-glow"></div>
+    <div class="lp-grid-overlay"></div>
+
+    <nav class="lp-nav" id="mainNav">
+        <div class="container lp-nav__inner">
+            <a href="#" class="lp-logo">
+                <span class="lp-logo__icon">✂️</span>
+                BerberRandevu
+            </a>
+            <ul class="lp-nav__links">
+                <li><a href="#ozellikler">Özellikler</a></li>
+                <li><a href="#nasil-calisir">Nasıl Çalışır</a></li>
+                <li><a href="#paketler">Paketler</a></li>
+                <li><a href="#sss">SSS</a></li>
+                <li><a href="#demo-talep" class="js-scroll-demo">İletişim</a></li>
+            </ul>
+            <div class="lp-nav__actions">
+                <a href="#demo-talep" class="lp-btn lp-btn--ghost js-scroll-demo">Dükkan Başvurusu</a>
+                <a href="#demo-talep" class="lp-btn lp-btn--primary js-scroll-demo">Ücretsiz Başla</a>
+            </div>
+            <button class="lp-nav__toggle" id="navToggle" aria-label="Menü">
+                <span></span><span></span><span></span>
+            </button>
+        </div>
+    </nav>
+
+    <div class="lp-mobile-menu" id="mobileMenu">
+        <a href="#ozellikler">Özellikler</a>
+        <a href="#nasil-calisir">Nasıl Çalışır</a>
+        <a href="#paketler">Paketler</a>
+        <a href="#sss">SSS</a>
+        <a href="#demo-talep" class="js-scroll-demo">İletişim</a>
+        <div class="lp-mobile-menu__actions">
+            <a href="#demo-talep" class="lp-btn lp-btn--ghost lp-btn--full js-scroll-demo">Dükkan Başvurusu</a>
+            <a href="#demo-talep" class="lp-btn lp-btn--primary lp-btn--full js-scroll-demo">Ücretsiz Başla</a>
+        </div>
+    </div>
+
+    <header class="lp-hero">
+        <div class="container lp-hero__grid">
+            <div class="lp-hero__content reveal">
+                <div class="lp-badge">
+                    <span class="lp-badge__dot"></span>
+                    Türkiye'nin Berber SaaS Platformu
+                </div>
+                <h1 class="lp-hero__title">
+                    Berberinizin Randevu Sistemi<br>
+                    <span>Artık Otomatik</span>
+                </h1>
+                <p class="lp-hero__subtitle">
+                    WhatsApp karmaşasını bitirin. Müşterileriniz 7/24 online randevu oluşturabilsin.
+                </p>
+                <div class="lp-hero__cta">
+                    <a href="#demo-talep" class="lp-btn lp-btn--primary lp-btn--lg js-scroll-demo">Dükkan Başvurusu</a>
+                    <a href="#demo-talep" class="lp-btn lp-btn--outline-gold lp-btn--lg js-scroll-demo">Ücretsiz Başla</a>
+                </div>
+                <div class="lp-hero__trust">
+                    <div class="lp-trust-item">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                        Kurulum 5 dakika
+                    </div>
+                    <div class="lp-trust-item">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                        Kredi kartı gerekmez
+                    </div>
+                    <div class="lp-trust-item">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                        7/24 destek
+                    </div>
+                </div>
+            </div>
+
+            <div class="lp-hero__visual reveal reveal-delay-2">
+                <div class="lp-mockup">
+                    <div class="lp-mockup__bar">
+                        <span class="lp-mockup__dot lp-mockup__dot--r"></span>
+                        <span class="lp-mockup__dot lp-mockup__dot--y"></span>
+                        <span class="lp-mockup__dot lp-mockup__dot--g"></span>
+                    </div>
+                    <div class="lp-mockup__body">
+                        <div class="lp-mockup__header">
+                            <div class="lp-mockup__logo">✂️</div>
+                            <div class="lp-mockup__name">X-Men Barber</div>
+                            <div style="color: var(--lp-text-dim); font-size: 0.8rem;">Online Randevu</div>
+                        </div>
+                        <div class="lp-mockup__slots">
+                            <div class="lp-mockup__slot lp-mockup__slot--free">09:00</div>
+                            <div class="lp-mockup__slot lp-mockup__slot--busy">09:30</div>
+                            <div class="lp-mockup__slot lp-mockup__slot--free">10:00</div>
+                            <div class="lp-mockup__slot lp-mockup__slot--sel">10:30</div>
+                            <div class="lp-mockup__slot lp-mockup__slot--free">11:00</div>
+                            <div class="lp-mockup__slot lp-mockup__slot--busy">11:30</div>
+                            <div class="lp-mockup__slot lp-mockup__slot--free">12:00</div>
+                            <div class="lp-mockup__slot lp-mockup__slot--free">12:30</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="lp-float-card lp-float-card--1">
+                    <div class="lp-float-card__label">Yeni Randevu</div>
+                    <div class="lp-float-card__value">+ Ahmet Y. · 10:30</div>
+                </div>
+                <div class="lp-float-card lp-float-card--2">
+                    <div class="lp-float-card__label">Bugün Boş Slot</div>
+                    <div class="lp-float-card__value">14 randevu</div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <section class="lp-stats">
+        <div class="container lp-stats__grid">
+            <div class="lp-stat-card reveal">
+                <div class="lp-stat-card__number" data-count="500" data-suffix="+">0</div>
+                <div class="lp-stat-card__label">Berber</div>
+            </div>
+            <div class="lp-stat-card reveal reveal-delay-1">
+                <div class="lp-stat-card__number" data-count="10000" data-suffix="+">0</div>
+                <div class="lp-stat-card__label">Randevu</div>
+            </div>
+            <div class="lp-stat-card reveal reveal-delay-2">
+                <div class="lp-stat-card__number" data-count="95" data-suffix="%" data-prefix="">0</div>
+                <div class="lp-stat-card__label">Memnuniyet</div>
+            </div>
+        </div>
+    </section>
+
+    <section class="lp-section" id="ozellikler">
+        <div class="container">
+            <div class="lp-section__header reveal">
+                <span class="lp-section__tag">Özellikler</span>
+                <h2 class="lp-section__title">İşletmenizi Bir Üst Seviyeye Taşıyın</h2>
+                <p class="lp-section__desc">Modern berberler için tasarlanmış, kullanımı kolay ve güçlü randevu yönetim araçları.</p>
+            </div>
+            <div class="lp-features__grid">
+                <article class="lp-feature-card reveal">
+                    <div class="lp-feature-card__icon">📅</div>
+                    <h3 class="lp-feature-card__title">Online Randevu</h3>
+                    <p class="lp-feature-card__desc">Müşterileriniz size özel linkinizden 7/24 randevu oluştursun. Telefon trafiği azalsın, doluluk artsın.</p>
+                </article>
+                <article class="lp-feature-card reveal reveal-delay-1">
+                    <div class="lp-feature-card__icon">🔔</div>
+                    <h3 class="lp-feature-card__title">Anlık Bildirim</h3>
+                    <p class="lp-feature-card__desc">Her yeni randevuda anında bildirim alın. Panelinizden tüm hareketleri canlı takip edin.</p>
+                </article>
+                <article class="lp-feature-card reveal reveal-delay-2">
+                    <div class="lp-feature-card__icon">👥</div>
+                    <h3 class="lp-feature-card__title">Müşteri Yönetimi</h3>
+                    <p class="lp-feature-card__desc">Müşteri geçmişi, iletişim bilgileri ve kampanya mesajları tek panelde. Sadık müşteri kitlesi oluşturun.</p>
+                </article>
+                <article class="lp-feature-card reveal reveal-delay-3">
+                    <div class="lp-feature-card__icon">💬</div>
+                    <h3 class="lp-feature-card__title">WhatsApp Entegrasyonu</h3>
+                    <p class="lp-feature-card__desc">Randevu linkinizi WhatsApp'tan paylaşın, otomatik hatırlatmalar gönderin. Müşterilerinizle bağlantıda kalın.</p>
+                </article>
+            </div>
+        </div>
+    </section>
+
+    <section class="lp-section lp-section--alt" id="deger-onerileri">
+        <div class="container">
+            <div class="lp-section__header reveal">
+                <span class="lp-section__tag">Neden BerberRandevu?</span>
+                <h2 class="lp-section__title">Berberinizin İşini Kolaylaştırıyoruz</h2>
+                <p class="lp-section__desc">Sadece randevu almak değil — işletmenizi büyütmek için tasarlandı.</p>
+            </div>
+            <div class="lp-value-grid">
+                <article class="lp-value-card reveal">
+                    <div class="lp-value-card__emoji">🔥</div>
+                    <p><strong>Telefon Trafiğine Son!</strong> Müşterileriniz siz tıraş yaparken bile 7/24 online randevusunu alsın, koltuğunuz hiç boş kalmasın.</p>
+                </article>
+                <article class="lp-value-card reveal reveal-delay-1">
+                    <div class="lp-value-card__emoji">📊</div>
+                    <p><strong>Gelişmiş Yönetim Paneli:</strong> Günlük, haftalık doluluk oranlarınızı görün, dükkanınızın kazancını tek ekrandan anlık takip edin.</p>
+                </article>
+                <article class="lp-value-card reveal reveal-delay-2">
+                    <div class="lp-value-card__emoji">💬</div>
+                    <p><strong>WhatsApp Karmaşasına Elveda:</strong> Randevusu yaklaşan müşterilere otomatik hatırlatmalar ve kesintisiz bilgilendirme sağlayın.</p>
+                </article>
+                <article class="lp-value-card reveal reveal-delay-3">
+                    <div class="lp-value-card__emoji">🚀</div>
+                    <p><strong>5 Dakikada Kurulum:</strong> Kodlama veya teknik bilgiye ihtiyaç duymadan, dükkanınıza özel randevu linkini anında canlıya alın!</p>
+                </article>
+            </div>
+        </div>
+    </section>
+
+    <section class="lp-section" id="panel-onizleme">
+        <div class="container">
+            <div class="lp-showcase reveal">
+                <div class="lp-showcase__content">
+                    <span class="lp-section__tag">Yönetim Paneli</span>
+                    <h2 class="lp-section__title">Tüm Dükkanınız Tek Ekranda</h2>
+                    <p class="lp-section__desc">Randevu takvimi, müşteri listesi, doluluk raporları ve bildirimler — hepsi berber panelinizde.</p>
+                    <ul class="lp-showcase__list">
+                        <li>Günlük / haftalık takvim görünümü</li>
+                        <li>Canlı randevu bildirimleri</li>
+                        <li>Müşteri mesajlaşma modülü</li>
+                    </ul>
+                </div>
+                <div class="lp-preview-frame reveal reveal-delay-1">
+                    <img src="assets/admin-preview.png" alt="Berber yönetim paneli önizlemesi" class="lp-preview-frame__img">
+                </div>
+            </div>
+            <div class="lp-showcase lp-showcase--reverse reveal">
+                <div class="lp-showcase__content">
+                    <span class="lp-section__tag">Müşteri Deneyimi</span>
+                    <h2 class="lp-section__title">Müşterileriniz İçin Premium Randevu Sayfası</h2>
+                    <p class="lp-section__desc">Markanıza özel randevu linki ile müşterileriniz saniyeler içinde slot seçsin.</p>
+                    <ul class="lp-showcase__list">
+                        <li>Mobil uyumlu randevu arayüzü</li>
+                        <li>Anlık boş slot görünümü</li>
+                        <li>WhatsApp ile kolay paylaşım</li>
+                    </ul>
+                </div>
+                <div class="lp-preview-frame reveal reveal-delay-1">
+                    <img src="assets/customer-preview.png" alt="Müşteri randevu sayfası önizlemesi" class="lp-preview-frame__img">
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="lp-section lp-section--alt" id="nasil-calisir">
+        <div class="container">
+            <div class="lp-section__header reveal">
+                <span class="lp-section__tag">Nasıl Çalışır</span>
+                <h2 class="lp-section__title">3 Adımda Hazırsınız</h2>
+                <p class="lp-section__desc">Teknik bilgi gerekmez. Dakikalar içinde randevu sisteminiz aktif olur.</p>
+            </div>
+            <div class="lp-steps">
+                <div class="lp-step reveal">
+                    <div class="lp-step__num">1</div>
+                    <h3 class="lp-step__title">Kayıt Olun</h3>
+                    <p class="lp-step__desc">Dükkan bilgilerinizi girin, kullanıcı adı ve şifrenizi belirleyin. Sistem anında hazır.</p>
+                </div>
+                <div class="lp-step reveal reveal-delay-1">
+                    <div class="lp-step__num">2</div>
+                    <h3 class="lp-step__title">Linkinizi Paylaşın</h3>
+                    <p class="lp-step__desc">Size özel randevu linkinizi Instagram, WhatsApp veya Google Haritalar'da paylaşın.</p>
+                </div>
+                <div class="lp-step reveal reveal-delay-2">
+                    <div class="lp-step__num">3</div>
+                    <h3 class="lp-step__title">Randevuları Yönetin</h3>
+                    <p class="lp-step__desc">Takvim panelinizden slotları yönetin, müşterilere mesaj gönderin, işinize odaklanın.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="lp-section" id="paketler">
+        <div class="container">
+            <div class="lp-section__header reveal">
+                <span class="lp-section__tag">Paketler</span>
+                <h2 class="lp-section__title">Size Uygun Planı Seçin</h2>
+                <p class="lp-section__desc">Şeffaf fiyatlandırma, gizli ücret yok. İstediğiniz zaman yükseltin veya iptal edin.</p>
+            </div>
+            <div class="lp-pricing__grid">
+                <article class="lp-price-card reveal">
+                    <div class="lp-price-card__name">Aylık Paket</div>
+                    <div class="lp-price-card__amount">₺500<span>/ay</span></div>
+                    <div class="lp-price-card__period">Esnek başlangıç için ideal</div>
+                    <ul class="lp-price-card__features">
+                        <li>Online randevu sayfası</li>
+                        <li>Yönetim paneli</li>
+                        <li>Anlık bildirimler</li>
+                        <li>Müşteri yönetimi</li>
+                        <li>E-posta desteği</li>
+                    </ul>
+                    <a href="#demo-talep" class="lp-btn lp-btn--ghost lp-btn--full js-scroll-demo">Başla</a>
+                </article>
+                <article class="lp-price-card reveal reveal-delay-1">
+                    <span class="lp-price-card__badge">Avantajlı</span>
+                    <div class="lp-price-card__name">3 Aylık Paket</div>
+                    <div class="lp-price-card__amount">₺1.250<span>/3 ay</span></div>
+                    <div class="lp-price-card__period">Aylık ₺417 — tasarruflu paket</div>
+                    <ul class="lp-price-card__features">
+                        <li>Tüm aylık özellikler</li>
+                        <li>WhatsApp entegrasyonu</li>
+                        <li>Kampanya mesajları</li>
+                        <li>Öncelikli destek</li>
+                        <li>Raporlama paneli</li>
+                    </ul>
+                    <a href="#demo-talep" class="lp-btn lp-btn--outline-gold lp-btn--full js-scroll-demo">Başla</a>
+                </article>
+                <article class="lp-price-card lp-price-card--featured reveal reveal-delay-2">
+                    <span class="lp-price-card__badge">En Popüler</span>
+                    <div class="lp-price-card__name">Yıllık Paket</div>
+                    <div class="lp-price-card__amount">₺4.000<span>/yıl</span></div>
+                    <div class="lp-price-card__period">Aylık ₺333 — en avantajlı</div>
+                    <ul class="lp-price-card__features">
+                        <li>Tüm premium özellikler</li>
+                        <li>Sınırsız randevu</li>
+                        <li>Telegram bildirimleri</li>
+                        <li>Özel marka rengi</li>
+                        <li>7/24 öncelikli destek</li>
+                    </ul>
+                    <a href="#demo-talep" class="lp-btn lp-btn--primary lp-btn--full js-scroll-demo">Başla</a>
+                </article>
+            </div>
+        </div>
+    </section>
+
+    <section class="lp-section lp-section--alt" id="sss">
+        <div class="container">
+            <div class="lp-section__header reveal">
+                <span class="lp-section__tag">SSS</span>
+                <h2 class="lp-section__title">Sık Sorulan Sorular</h2>
+                <p class="lp-section__desc">Merak ettiklerinizin cevapları burada.</p>
+            </div>
+            <div class="lp-faq reveal">
+                <div class="lp-faq__item">
+                    <button class="lp-faq__question" type="button">
+                        Kurulum ne kadar sürer?
+                        <span class="lp-faq__icon">+</span>
+                    </button>
+                    <div class="lp-faq__answer">
+                        <p>Ortalama 5 dakika içinde sisteminiz hazır. Dükkan bilgilerinizi girip randevu linkinizi paylaşmaya başlayabilirsiniz.</p>
+                    </div>
+                </div>
+                <div class="lp-faq__item">
+                    <button class="lp-faq__question" type="button">
+                        Teknik bilgi gerekiyor mu?
+                        <span class="lp-faq__icon">+</span>
+                    </button>
+                    <div class="lp-faq__answer">
+                        <p>Hayır. Arayüz tamamen Türkçe ve sezgisel tasarlandı. Her berber kolayca kullanabilir.</p>
+                    </div>
+                </div>
+                <div class="lp-faq__item">
+                    <button class="lp-faq__question" type="button">
+                        Müşterilerim nasıl randevu alır?
+                        <span class="lp-faq__icon">+</span>
+                    </button>
+                    <div class="lp-faq__answer">
+                        <p>Size özel linkiniz üzerinden: randevu.html?dukkan=dukkan-adiniz. Bu linki WhatsApp, Instagram veya Google'da paylaşmanız yeterli.</p>
+                    </div>
+                </div>
+                <div class="lp-faq__item">
+                    <button class="lp-faq__question" type="button">
+                        Mevcut randevularımı aktarabilir miyim?
+                        <span class="lp-faq__icon">+</span>
+                    </button>
+                    <div class="lp-faq__answer">
+                        <p>Evet, destek ekibimiz mevcut defter veya Excel listenizi sisteme aktarmanıza yardımcı olur.</p>
+                    </div>
+                </div>
+                <div class="lp-faq__item">
+                    <button class="lp-faq__question" type="button">
+                        İptal ve iade politikası nedir?
+                        <span class="lp-faq__icon">+</span>
+                    </button>
+                    <div class="lp-faq__answer">
+                        <p>İlk 14 gün içinde memnun kalmazsanız koşulsuz iade garantisi sunuyoruz. Aboneliğinizi istediğiniz zaman sonlandırabilirsiniz.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="lp-section" id="demo-talep">
+        <div class="container">
+            <div class="lp-contact__grid">
+                <div class="lp-contact__info reveal">
+                    <span class="lp-section__tag">Dükkan Başvurusu</span>
+                    <h3>Ücretsiz Dükkan Başvurusu</h3>
+                    <p>Formu doldurun, ekibimiz başvurunuzu inceleyip onay sonrası panelinizi otomatik oluştursun.</p>
+                    <ul class="lp-contact__details">
+                        <li><span>📧</span> <a href="mailto:emrecglyn397@gmail.com">emrecglyn397@gmail.com</a></li>
+                        <li><span>📱</span> <a href="tel:+905455925831">+90 545 592 58 31</a></li>
+                        <li><span>🕐</span> Hafta içi 09:00 – 18:00</li>
+                    </ul>
+                </div>
+                <form class="lp-form reveal reveal-delay-1" id="demoRequestForm">
+                    <div class="lp-form__row">
+                        <div class="lp-form__group">
+                            <label for="demoAdSoyad">Ad Soyad <span class="lp-required">*</span></label>
+                            <input type="text" id="demoAdSoyad" name="adSoyad" placeholder="Adınız Soyadınız" required autocomplete="name">
+                        </div>
+                        <div class="lp-form__group">
+                            <label for="demoTelefon">Telefon Numarası <span class="lp-required">*</span></label>
+                            <input type="tel" id="demoTelefon" name="telefon" placeholder="0555 000 00 00" required autocomplete="tel">
+                        </div>
+                    </div>
+                    <div class="lp-form__group">
+                        <label for="demoEmail">E-posta Adresi <span class="lp-required">*</span></label>
+                        <input type="email" id="demoEmail" name="email" placeholder="ornek@email.com" required autocomplete="email">
+                    </div>
+                    <div class="lp-form__group">
+                        <label for="demoDukkanAdi">Dükkan Adı <span class="lp-required">*</span></label>
+                        <input type="text" id="demoDukkanAdi" name="dukkanAdi" placeholder="Örn: X-Men Barber" required>
+                    </div>
+                    <div class="lp-form__row">
+                        <div class="lp-form__group">
+                            <label for="demoOpenHour">Açılış Saati <span class="lp-required">*</span></label>
+                            <select id="demoOpenHour" name="openingHour" required></select>
+                        </div>
+                        <div class="lp-form__group">
+                            <label for="demoCloseHour">Kapanış Saati <span class="lp-required">*</span></label>
+                            <select id="demoCloseHour" name="closingHour" required></select>
+                        </div>
+                    </div>
+                    <div class="lp-form__row">
+                        <div class="lp-form__group">
+                            <label for="demoCity">İl <span class="lp-required">*</span></label>
+                            <select id="demoCity" name="city" required>
+                                <option value="">İl seçiniz</option>
+                            </select>
+                        </div>
+                        <div class="lp-form__group">
+                            <label for="demoDistrict">İlçe <span class="lp-required">*</span></label>
+                            <select id="demoDistrict" name="district" required disabled>
+                                <option value="">Önce il seçiniz</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="lp-form__group">
+                        <label for="demoAddress">Açık Adres <span class="lp-required">*</span></label>
+                        <textarea id="demoAddress" name="address" placeholder="Menderes Mahallesi 120 Sokak No:15" required rows="2"></textarea>
+                    </div>
+                    <div class="lp-form__group">
+                        <label for="demoMapsLink">Google Maps Linki <span class="lp-optional">(Opsiyonel)</span></label>
+                        <input type="url" id="demoMapsLink" name="mapsLink" placeholder="https://maps.google.com/...">
+                    </div>
+                    <div class="lp-form__group">
+                        <label for="demoPackage">Paket Tercihi <span class="lp-required">*</span></label>
+                        <select id="demoPackage" name="packageType" required>
+                            <option value="monthly">Aylık Paket</option>
+                            <option value="quarterly">3 Aylık Paket</option>
+                            <option value="yearly">Yıllık Paket</option>
+                            <option value="demo" selected>Önce Demo İstiyorum</option>
+                        </select>
+                    </div>
+                    <div class="lp-form__group">
+                        <label for="demoMesaj">Mesajınız <span class="lp-optional">(Opsiyonel)</span></label>
+                        <textarea id="demoMesaj" name="mesaj" placeholder="Eklemek istediğiniz notlar..."></textarea>
+                    </div>
+                    <p class="lp-form__error" id="demoFormError" hidden></p>
+                    <button type="submit" class="lp-btn lp-btn--primary lp-btn--full" id="demoSubmitBtn">Başvuruyu Gönder</button>
+                </form>
+            </div>
+        </div>
+    </section>
+
+    <footer class="lp-footer">
+        <div class="container">
+            <div class="lp-footer__grid">
+                <div class="lp-footer__brand">
+                    <a href="#" class="lp-logo">
+                        <span class="lp-logo__icon">✂️</span>
+                        BerberRandevu
+                    </a>
+                    <p>Berberler için profesyonel online randevu ve müşteri yönetim platformu.</p>
+                </div>
+                <div class="lp-footer__col">
+                    <h4>Platform</h4>
+                    <ul>
+                        <li><a href="#ozellikler">Özellikler</a></li>
+                        <li><a href="#paketler">Paketler</a></li>
+                        <li><a href="randevu.html?dukkan=x-men-barber">Demo Randevu</a></li>
+                    </ul>
+                </div>
+                <div class="lp-footer__col">
+                    <h4>Destek</h4>
+                    <ul>
+                        <li><a href="#demo-talep" class="js-scroll-demo">Dükkan Başvurusu</a></li>
+                        <li><a href="barber-login.html">Berber Girişi</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="lp-footer__bottom">
+                <span>© 2026 BerberRandevu. Tüm hakları saklıdır.</span>
+                <span>Berberinize güven veren profesyonel çözüm.</span>
+            </div>
+        </div>
+    </footer>
+
+    <div class="lp-toast" id="lpToast" role="status" aria-live="polite"></div>
+    </div><!-- /saasRoot -->
+
+    <script type="module" src="landing.js"></script>
+</body>
+</html>

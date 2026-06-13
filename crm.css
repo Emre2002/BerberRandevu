@@ -1,0 +1,331 @@
+/* ============================================================
+   Müşteri Yönetimi (CRM) — modern SaaS arayüzü
+   Stripe / HubSpot / Notion mantığında temiz ve profesyonel.
+   ============================================================ */
+
+.crm {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+/* --- İstatistik kartları --- */
+.crm-stats {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 12px;
+}
+
+.crm-stat {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    transition: border-color .15s ease, transform .15s ease;
+}
+
+.crm-stat:hover { border-color: var(--border-hover); transform: translateY(-1px); }
+
+.crm-stat__icon {
+    width: 42px; height: 42px;
+    flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.25rem;
+    border-radius: 10px;
+    background: var(--bg-secondary);
+}
+
+.crm-stat__value { font-size: 1.5rem; font-weight: 700; line-height: 1.1; color: var(--text-primary); }
+.crm-stat__label { font-size: 0.75rem; color: var(--text-muted); margin-top: 2px; }
+
+.crm-stat--accent .crm-stat__icon { background: rgba(59,130,246,.15); }
+.crm-stat--success .crm-stat__icon { background: rgba(34,197,94,.15); }
+.crm-stat--info .crm-stat__icon { background: rgba(99,102,241,.15); }
+.crm-stat--gold .crm-stat__icon { background: rgba(212,168,83,.18); }
+.crm-stat--danger .crm-stat__icon { background: rgba(239,68,68,.15); }
+
+/* --- Araç çubuğu (sabit/sticky) --- */
+.crm-toolbar {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 0;
+    background: var(--bg-primary, #0a0a0f);
+    background: var(--bg-secondary);
+    border-radius: var(--radius-sm);
+}
+
+.crm-search {
+    position: relative;
+    flex: 1 1 240px;
+    min-width: 0;
+}
+.crm-search__icon {
+    position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+    font-size: 0.9rem; opacity: .6; pointer-events: none;
+}
+.crm-search input {
+    width: 100%;
+    padding: 11px 12px 11px 36px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 0.9rem;
+}
+.crm-search input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow, rgba(59,130,246,.2)); }
+
+.crm-filters { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.crm-filter {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 9px 12px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    color: var(--text-secondary);
+    font-family: inherit;
+    font-size: 0.8125rem;
+    cursor: pointer;
+    transition: all .15s ease;
+    white-space: nowrap;
+}
+.crm-filter:hover { border-color: var(--border-hover); color: var(--text-primary); }
+.crm-filter.active { border-color: var(--accent); color: var(--text-primary); background: rgba(59,130,246,.12); }
+.crm-filter__count {
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: var(--bg-secondary);
+    color: var(--text-muted);
+}
+.crm-filter.active .crm-filter__count { background: var(--accent); color: #fff; }
+
+/* --- Tablo (masaüstü) --- */
+.crm-table-wrap {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+}
+.crm-table { width: 100%; border-collapse: collapse; }
+.crm-table thead th {
+    text-align: left;
+    padding: 13px 16px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: .03em;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-secondary);
+    user-select: none;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.crm-th--status { cursor: default; }
+.crm-th.active { color: var(--text-primary); }
+.crm-th__arrow { font-size: 0.7rem; opacity: .7; }
+.crm-th.active .crm-th__arrow { color: var(--accent); opacity: 1; }
+
+.crm-table tbody td {
+    padding: 14px 16px;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+}
+.crm-table tbody tr:last-child td { border-bottom: none; }
+.crm-row { cursor: pointer; transition: background .12s ease; }
+.crm-row:hover { background: rgba(255,255,255,.03); }
+.crm-td--name { color: var(--text-primary); font-weight: 600; }
+.crm-td--phone { font-variant-numeric: tabular-nums; }
+.crm-td--center { text-align: center; font-weight: 600; color: var(--text-primary); }
+
+/* --- Rozetler --- */
+.crm-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 9px;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    white-space: nowrap;
+    margin-right: 4px;
+}
+.crm-badge--active { background: rgba(34,197,94,.14); color: #4ade80; border: 1px solid rgba(34,197,94,.3); }
+.crm-badge--risky { background: rgba(234,179,8,.14); color: #eab308; border: 1px solid rgba(234,179,8,.3); }
+.crm-badge--lost { background: rgba(239,68,68,.14); color: #f87171; border: 1px solid rgba(239,68,68,.3); }
+.crm-badge--vip { background: rgba(212,168,83,.16); color: #e9c46a; border: 1px solid rgba(212,168,83,.35); }
+
+/* --- Kart görünümü (mobil) --- */
+.crm-cards { display: none; flex-direction: column; gap: 10px; padding: 10px; }
+.crm-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 14px;
+    cursor: pointer;
+    transition: border-color .15s ease;
+}
+.crm-card:active { border-color: var(--accent); }
+.crm-card__top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.crm-card__name { font-weight: 700; color: var(--text-primary); font-size: 0.95rem; }
+.crm-card__badges { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; }
+.crm-card__phone { font-size: 0.85rem; color: var(--text-secondary); margin-top: 6px; }
+.crm-card__meta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; font-size: 0.78rem; color: var(--text-muted); }
+
+/* --- Boş / yükleniyor durumları --- */
+.crm-empty { text-align: center; padding: 48px 20px; color: var(--text-muted); }
+.crm-empty__icon { font-size: 2rem; margin-bottom: 10px; }
+.crm-loading { padding: 28px; text-align: center; color: var(--text-muted); font-size: 0.875rem; }
+
+/* --- Sayfalama --- */
+.crm-pagination { display: flex; align-items: center; justify-content: center; gap: 14px; flex-wrap: wrap; min-height: 20px; }
+.crm-page-btn {
+    padding: 8px 14px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    font-family: inherit;
+    font-size: 0.8125rem;
+    cursor: pointer;
+}
+.crm-page-btn:hover:not(:disabled) { border-color: var(--border-hover); color: var(--text-primary); }
+.crm-page-btn:disabled { opacity: .4; cursor: not-allowed; }
+.crm-page-info { font-size: 0.8125rem; color: var(--text-muted); }
+
+/* --- Detay modalı --- */
+.crm-modal-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.6);
+    backdrop-filter: blur(4px);
+    display: none;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 24px 16px;
+    z-index: 1000;
+    overflow-y: auto;
+}
+.crm-modal-overlay.open { display: flex; }
+.crm-modal {
+    position: relative;
+    width: 100%;
+    max-width: 520px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: 0 20px 60px rgba(0,0,0,.5);
+    margin: auto;
+    animation: crmModalIn .18s ease;
+}
+@keyframes crmModalIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+.crm-modal__close {
+    position: absolute; top: 12px; right: 12px;
+    width: 32px; height: 32px;
+    border: none; border-radius: 50%;
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    font-size: 1.25rem; line-height: 1; cursor: pointer;
+}
+.crm-modal__close:hover { color: var(--text-primary); }
+.crm-modal__body { padding: 24px; }
+
+.crm-detail__header { display: flex; align-items: center; gap: 14px; padding-right: 32px; }
+.crm-detail__avatar {
+    width: 52px; height: 52px; flex-shrink: 0;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.4rem; font-weight: 700; color: #fff;
+    background: linear-gradient(135deg, var(--accent), var(--accent-hover));
+}
+.crm-detail__name { font-size: 1.1rem; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.crm-detail__phone { font-size: 0.85rem; color: var(--text-muted); margin-top: 2px; }
+.crm-detail__status { margin-left: auto; }
+
+.crm-detail__grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin: 20px 0; }
+.crm-detail__stat {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 12px;
+    display: flex; flex-direction: column; gap: 4px;
+}
+.crm-detail__stat span { font-size: 0.72rem; color: var(--text-muted); }
+.crm-detail__stat strong { font-size: 1.05rem; color: var(--text-primary); }
+
+.crm-detail__variants { margin-bottom: 18px; }
+.crm-detail__variants h4 { font-size: 0.875rem; color: var(--text-primary); margin: 0 0 10px; }
+.crm-variant-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.crm-variant {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 6px 10px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+}
+.crm-variant__name { color: var(--text-primary); }
+.crm-variant__count {
+    min-width: 20px; text-align: center;
+    padding: 1px 7px; border-radius: 999px;
+    background: var(--accent); color: #fff;
+    font-size: 0.72rem; font-weight: 700;
+}
+
+.crm-detail__history h4 { font-size: 0.875rem; color: var(--text-primary); margin: 0 0 10px; }
+.crm-history { display: flex; flex-direction: column; gap: 8px; max-height: 300px; overflow-y: auto; }
+.crm-history__item {
+    display: flex; justify-content: space-between; align-items: center; gap: 12px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 11px 14px;
+}
+.crm-history__date { font-size: 0.8125rem; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.crm-history__service { font-size: 0.8125rem; font-weight: 600; color: var(--text-primary); text-align: right; }
+.crm-history__empty { color: var(--text-muted); font-size: 0.85rem; text-align: center; padding: 20px; }
+
+/* ============================================================
+   Responsive — tablet ve mobil
+   ============================================================ */
+@media (max-width: 980px) {
+    .crm-stats { grid-template-columns: repeat(3, 1fr); }
+}
+
+@media (max-width: 768px) {
+    .crm-stats { grid-template-columns: repeat(2, 1fr); }
+    .crm-stat { padding: 13px; }
+    .crm-stat__value { font-size: 1.25rem; }
+
+    /* Tabloyu gizle, kart görünümüne geç */
+    .crm-table { display: none; }
+    .crm-cards { display: flex; }
+
+    .crm-toolbar { flex-direction: column; align-items: stretch; padding: 10px; }
+    .crm-filters { overflow-x: auto; flex-wrap: nowrap; padding-bottom: 4px; -webkit-overflow-scrolling: touch; }
+    .crm-filter { flex-shrink: 0; }
+
+    .crm-detail__grid { grid-template-columns: repeat(2, 1fr); }
+    .crm-modal__body { padding: 18px; }
+}
+
+@media (max-width: 380px) {
+    .crm-stats { grid-template-columns: 1fr 1fr; }
+    .crm-detail__header { flex-wrap: wrap; }
+    .crm-detail__status { margin-left: 0; }
+}

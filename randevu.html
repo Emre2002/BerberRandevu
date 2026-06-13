@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Online berber randevu sayfası. Dükkanınızın çalışma saatleri içinde boş slotu seçin, saniyeler içinde randevunuzu oluşturun.">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Randevu Al | Berber</title>
+    <script>
+        // Slug yoksa randevu sayfası anlamsızdır; kullanıcıyı tanıtım sayfasına gönder.
+        (function () {
+            var params = new URLSearchParams(window.location.search);
+            var slug = params.get("dukkan") || params.get("randevu") || params.get("shop");
+            if (!slug) {
+                window.location.replace("index.html");
+                return;
+            }
+            // app.js'in beklediği standart parametreyi garanti altına al.
+            window.BOOKING_SLUG = slug;
+            window.PAGE_MODE = "booking";
+        })();
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="bookingRoot">
+        <div class="app">
+            <header class="header">
+                <div class="logo-area" id="logoArea">
+                    <span class="logo-placeholder">✂️</span>
+                </div>
+                <h1 class="barber-name" id="barberName">Elite Berber</h1>
+                <p class="barber-tagline">Premium Berber Deneyimi</p>
+            </header>
+            <div class="info-grid">
+                <div class="info-card info-card--address" id="addressCard">
+                    <div class="info-icon">📍</div>
+                    <div class="info-card__body">
+                        <div class="info-label">Adres</div>
+                        <div class="info-value" id="barberAddress">Adres yükleniyor...</div>
+                        <button type="button" class="directions-btn" id="directionsBtn" hidden>
+                            <span class="directions-btn__icon">🧭</span>
+                            <span>Yol Tarifi Al</span>
+                        </button>
+                        <div class="directions-empty" id="directionsEmpty" hidden>Adres bilgisi henüz eklenmemiş.</div>
+                    </div>
+                </div>
+                <div class="info-card">
+                    <div class="info-icon">📞</div>
+                    <div>
+                        <div class="info-label">Telefon</div>
+                        <div class="info-value"><a href="tel:+905551234567" id="barberPhone">—</a></div>
+                    </div>
+                </div>
+                <div class="info-card">
+                    <div class="info-icon">🕐</div>
+                    <div>
+                        <div class="info-label">Çalışma Saatleri</div>
+                        <div class="info-value" id="barberHours">—</div>
+                    </div>
+                </div>
+            </div>
+            <blockquote class="quote-card" id="motivationQuote">—</blockquote>
+            <div class="stats-row">
+                <div class="stat-badge">
+                    <div class="stat-number" id="availableCount">—</div>
+                    <div class="stat-label">Bugün Boş Randevu</div>
+                </div>
+            </div>
+            <section class="section">
+                <h2 class="section-title">Tarih Seçin</h2>
+                <div class="form-group"><input type="date" id="appointmentDate"></div>
+            </section>
+            <section class="section">
+                <h2 class="section-title">Saat Seçin</h2>
+                <div class="slots-legend">
+                    <span class="legend-item"><span class="legend-dot legend-dot--available"></span> Boş</span>
+                    <span class="legend-item"><span class="legend-dot legend-dot--booked"></span> Dolu</span>
+                    <span class="legend-item"><span class="legend-dot legend-dot--closed"></span> Kapalı</span>
+                    <span class="legend-item"><span class="legend-dot legend-dot--selected"></span> Seçili</span>
+                </div>
+                <div id="slotsContainer" class="slots-grid">
+                    <div class="slots-loading">Saatler yükleniyor...</div>
+                </div>
+            </section>
+            <section class="section">
+                <h2 class="section-title">Randevu Bilgileri</h2>
+                <div class="form-group">
+                    <label for="customerName">Ad Soyad</label>
+                    <input type="text" id="customerName" placeholder="Örn: Ahmet Yılmaz" autocomplete="name">
+                </div>
+                <div class="form-group">
+                    <label for="customerPhone">Telefon Numarası</label>
+                    <input type="tel" id="customerPhone" placeholder="Örn: 0555 123 45 67" autocomplete="tel">
+                </div>
+                <div class="form-group">
+                    <label for="serviceSelect">Hizmet Seçimi</label>
+                    <select id="serviceSelect">
+                        <option value="">Hizmet seçiniz...</option>
+                        <option value="Saç Kesimi">Saç Kesimi</option>
+                        <option value="Saç + Sakal">Saç + Sakal</option>
+                        <option value="Sakal">Sakal</option>
+                        <option value="Çocuk Tıraşı">Çocuk Tıraşı</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="customerNote">Randevu Notu / Mesajınız (Opsiyonel)</label>
+                    <textarea id="customerNote" rows="3" placeholder="Berbere iletmek istediğiniz bir not varsa buraya yazabilirsiniz..."></textarea>
+                </div>
+                <button class="btn btn-primary" id="btnBook" disabled>Randevuyu Onayla</button>
+            </section>
+            <a href="admin.html" class="admin-link" id="adminPanelLink">Yönetim Paneli →</a>
+            <p style="text-align:center;margin-top:12px;font-size:0.8rem;">
+                <a href="index.html" style="color:var(--text-muted);">← Ana Sayfa</a>
+            </p>
+        </div>
+        <div class="toast" id="toast"></div>
+    </div>
+
+    <script type="module" src="app.js"></script>
+</body>
+</html>

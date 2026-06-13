@@ -1,0 +1,106 @@
+/* Berber admin — Çalışma Saatleri */
+
+.wh-panel {
+    max-width: 640px;
+}
+
+.wh-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px;
+}
+
+.wh-card__title {
+    margin: 0 0 8px;
+    font-size: 1.1rem;
+}
+
+.wh-card__desc {
+    margin: 0 0 20px;
+    font-size: 0.875rem;
+    color: var(--text-muted);
+    line-height: 1.5;
+}
+
+.wh-form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+.wh-form-group label {
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+}
+
+.wh-form-group select {
+    width: 100%;
+    padding: 12px 14px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 0.95rem;
+}
+
+.wh-form-group select:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.wh-preview {
+    margin-bottom: 20px;
+    padding: 14px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+}
+
+.wh-preview__label {
+    display: block;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: .03em;
+    margin-bottom: 10px;
+}
+
+.wh-preview__chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.wh-preview__chip {
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: rgba(59, 130, 246, 0.12);
+    border: 1px solid rgba(59, 130, 246, 0.25);
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+}
+
+.wh-preview__error {
+    font-size: 0.85rem;
+    color: #f87171;
+}
+
+.calendar-cell--outside-hours {
+    outline: 2px dashed rgba(249, 115, 22, 0.55);
+    outline-offset: -2px;
+}
+
+.calendar-cell--outside-hours.calendar-cell--booked {
+    background: rgba(249, 115, 22, 0.18) !important;
+}
+
+@media (max-width: 640px) {
+    .wh-form-row { grid-template-columns: 1fr; }
+}

@@ -1,0 +1,45 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Oturum kontrolü istemci tarafında (sessionStorage) yapılır.
+    // Canlı ortamda hassas yazma işlemleri için Cloud Functions önerilir.
+
+    match /berberler/{slug} {
+      allow read: if true;
+      allow write: if true;
+
+      match /blockedSlots/{docId} {
+        allow read, write: if true;
+      }
+
+      match /appointments/{docId} {
+        allow read, write: if true;
+      }
+    }
+
+    match /appointments/{docId} {
+      allow read, write: if true;
+    }
+
+    match /payments/{docId} {
+      allow read, write: if true;
+    }
+
+    match /customers/{docId} {
+      allow read, write: if true;
+    }
+
+    match /notifications/{docId} {
+      allow read, write: if true;
+    }
+
+    match /campaigns/{docId} {
+      allow read, write: if true;
+    }
+
+    match /demo_talepleri/{docId} {
+      allow read, write: if true;
+    }
+  }
+}

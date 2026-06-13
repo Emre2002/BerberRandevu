@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Süper Admin | Berber SaaS</title>
+    <link rel="stylesheet" href="super-admin.css">
+    <link rel="stylesheet" href="super-admin-dashboard.css">
+    <link rel="stylesheet" href="subscription.css">
+    <link rel="stylesheet" href="pending-barbers.css">
+</head>
+<body>
+    <div id="saLoginScreen" class="sa-login">
+        <div class="sa-login__card">
+            <div class="sa-login__icon">🛡️</div>
+            <h1 class="sa-login__title">Süper Admin</h1>
+            <p class="sa-login__subtitle">Yetkili erişim — giriş gerekli</p>
+            <div class="sa-login__error" id="saLoginError" role="alert">Hatalı kullanıcı adı veya şifre.</div>
+            <form id="saLoginForm" autocomplete="off">
+                <div class="sa-form-group" style="margin-bottom:16px;">
+                    <label for="saUsername">Kullanıcı Adı</label>
+                    <input type="text" id="saUsername" required autocomplete="username">
+                </div>
+                <div class="sa-form-group" style="margin-bottom:20px;">
+                    <label for="saPassword">Şifre</label>
+                    <input type="password" id="saPassword" required autocomplete="current-password">
+                </div>
+                <button type="submit" class="sa-btn sa-btn--primary" style="width:100%;" id="saLoginBtn">Giriş Yap</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="saAppMount"></div>
+    <div class="sa-toast" id="saToast"></div>
+    <script type="module" src="super-admin.js"></script>
+</body>
+</html>

@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Yönetim Paneli | Berber</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="super-admin.css">
+    <link rel="stylesheet" href="crm.css">
+    <link rel="stylesheet" href="subscription.css">
+    <link rel="stylesheet" href="working-hours.css">
+    <style>
+        .admin-topbar { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; margin-bottom:16px; position:relative; }
+        .admin-topbar__actions { display:flex; gap:8px; align-items:flex-start; }
+        .admin-logout { padding:8px 14px; background:transparent; border:1px solid var(--border); border-radius:var(--radius-sm); color:var(--text-muted); font-size:0.8125rem; cursor:pointer; font-family:inherit; }
+        .admin-tabs { display:flex; gap:8px; margin-bottom:20px; flex-wrap:wrap; }
+        .admin-tab { padding:10px 16px; border:1px solid var(--border); background:var(--bg-card); color:var(--text-secondary); border-radius:var(--radius-sm); cursor:pointer; font-family:inherit; font-size:0.875rem; }
+        .admin-tab.active { border-color:var(--accent); color:var(--text-primary); background:rgba(59,130,246,0.1); }
+        .msg-panel { display:grid; gap:20px; }
+        .msg-preview { background:var(--bg-secondary); border:1px solid var(--border); border-radius:var(--radius-sm); padding:16px; min-height:100px; white-space:pre-wrap; font-size:0.9375rem; }
+        .msg-history { display:flex; flex-direction:column; gap:12px; max-height:320px; overflow-y:auto; }
+        .msg-history-item { background:var(--bg-secondary); border:1px solid var(--border); border-radius:var(--radius-sm); padding:12px; }
+        .msg-history-item__meta { font-size:0.75rem; color:var(--text-muted); margin-bottom:6px; }
+        .msg-empty { color:var(--text-muted); font-size:0.875rem; text-align:center; padding:24px; }
+        #liveNotificationCenter { position:fixed; top:16px; right:16px; z-index:9999; display:flex; flex-direction:column; gap:10px; max-width:320px; pointer-events:none; }
+        .bl-page { min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px 16px; position:relative; z-index:2; }
+        .bl-card { width:100%; max-width:420px; background:linear-gradient(145deg, var(--sa-bg-elevated, #1a1a26), var(--sa-bg-card, #12121a)); border:1px solid var(--border); border-radius:12px; padding:40px 32px; box-shadow:0 8px 40px rgba(0,0,0,0.5); }
+        .bl-icon { width:72px; height:72px; margin:0 auto 20px; border-radius:50%; background:rgba(212,168,83,0.15); border:1px solid rgba(212,168,83,0.3); display:flex; align-items:center; justify-content:center; font-size:2rem; }
+        .bl-title { text-align:center; font-size:1.5rem; font-weight:700; margin-bottom:4px; }
+        .bl-shop { text-align:center; font-size:0.875rem; color:var(--text-muted); margin-bottom:4px; }
+        .bl-slug { text-align:center; font-family:monospace; font-size:0.75rem; color:var(--accent); margin-bottom:28px; }
+        .bl-error { background:rgba(239,68,68,0.12); border:1px solid rgba(239,68,68,0.35); border-radius:8px; color:#ef4444; font-size:0.875rem; text-align:center; padding:12px; margin-bottom:16px; }
+        .bl-warn { background:rgba(234,179,8,0.12); border:1px solid rgba(234,179,8,0.35); border-radius:8px; color:#eab308; font-size:0.875rem; text-align:center; padding:12px; margin-bottom:16px; }
+        .bl-back { display:block; text-align:center; margin-top:20px; font-size:0.8125rem; color:var(--text-muted); text-decoration:none; }
+        .bl-back:hover { color:var(--text-primary); }
+        .sa-mode-bar { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; padding:12px 16px; margin-bottom:16px; border-radius:var(--radius-sm); background:linear-gradient(90deg, rgba(212,168,83,0.16), rgba(99,102,241,0.14)); border:1px solid rgba(212,168,83,0.4); }
+        .sa-mode-bar__text { font-size:0.875rem; color:var(--text-primary); }
+        .sa-mode-bar__btn { padding:8px 14px; border-radius:var(--radius-sm); background:rgba(99,102,241,0.18); border:1px solid rgba(99,102,241,0.5); color:#c7d2fe; font-size:0.8125rem; font-weight:600; text-decoration:none; white-space:nowrap; transition:background .2s ease; }
+        .sa-mode-bar__btn:hover { background:rgba(99,102,241,0.32); }
+    </style>
+</head>
+<body>
+    <div id="barberLoginGate" class="bl-page">
+        <div class="bl-card">
+            <div class="bl-icon">✂️</div>
+            <h1 class="bl-title">Yönetim Paneli Giriş</h1>
+            <p class="bl-shop" id="barberShopName">Berber</p>
+            <p class="bl-slug" id="barberShopSlug">—</p>
+
+            <div class="bl-warn" id="barberMissingSlug" hidden>
+                Bu sayfaya erişmek için URL'de dükkan parametresi gerekir.<br>
+                Örnek: <code>admin.html?dukkan=dukkan-slug</code>
+            </div>
+
+            <div class="bl-error" id="barberLoginError" role="alert" hidden></div>
+
+            <form id="barberLoginForm" autocomplete="off">
+                <div class="sa-form-group" style="margin-bottom:16px;">
+                    <label for="barberUsername">Kullanıcı Adı</label>
+                    <input type="text" id="barberUsername" placeholder="Kullanıcı adınız" required autocomplete="username">
+                </div>
+                <div class="sa-form-group" style="margin-bottom:20px;">
+                    <label for="barberPassword">Şifre</label>
+                    <input type="password" id="barberPassword" placeholder="Şifreniz" required autocomplete="current-password">
+                </div>
+                <button type="submit" class="sa-btn sa-btn--primary" id="barberLoginBtn" style="width:100%;">Giriş Yap</button>
+            </form>
+
+            <a href="randevu.html" class="bl-back" id="barberBackLink">← Müşteri sayfasına dön</a>
+        </div>
+    </div>
+
+    <div id="liveNotificationCenter"></div>
+
+    <div id="adminPanel" class="app app--admin" hidden>
+        <div class="admin-topbar">
+            <h1 class="admin-title">Berber Yönetim Paneli</h1>
+            <div class="admin-topbar__actions">
+                <button type="button" class="admin-logout" id="btnLogout">Çıkış Yap</button>
+            </div>
+        </div>
+
+        <div class="sub-topbar" id="adminSubTopbar" hidden>
+            <div class="sub-topbar__grid">
+                <div class="sub-topbar__item">
+                    <span class="sub-topbar__label">Abonelik Durumu</span>
+                    <span class="sub-badge sub-badge--green" id="subTopBadge">—</span>
+                </div>
+                <div class="sub-topbar__item">
+                    <span class="sub-topbar__label">Bitiş Tarihi</span>
+                    <strong id="subTopEnd">—</strong>
+                </div>
+                <div class="sub-topbar__item">
+                    <span class="sub-topbar__label">Kalan Süre</span>
+                    <strong id="subTopRemaining">—</strong>
+                </div>
+            </div>
+            <button type="button" class="sub-topbar__link" id="subTopGoTab">Abonelik →</button>
+        </div>
+
+        <div class="sub-lock-banner" id="adminSubLockBanner" hidden></div>
+
+        <div class="admin-tabs">
+            <button type="button" class="admin-tab active" data-tab="calendar">📅 Takvim</button>
+            <button type="button" class="admin-tab" data-tab="customers">👥 Müşteriler</button>
+            <button type="button" class="admin-tab" data-tab="messages">💬 Müşterilere Mesaj Gönder</button>
+            <button type="button" class="admin-tab" data-tab="hours">🕐 Çalışma Saatleri</button>
+            <button type="button" class="admin-tab" data-tab="subscription">🔑 Abonelik</button>
+        </div>
+
+        <div class="admin-tab-panel" data-panel="calendar">
+            <div class="admin-header">
+                <div class="admin-nav">
+                    <button class="btn btn-secondary btn-sm" id="btnPrevWeek">← Önceki</button>
+                    <span class="week-label" id="weekLabel">—</span>
+                    <button class="btn btn-secondary btn-sm" id="btnNextWeek">Sonraki →</button>
+                </div>
+            </div>
+            <div class="admin-legend">
+                <span class="legend-item"><span class="legend-dot legend-dot--available"></span> Boş — tıkla: kapat</span>
+                <span class="legend-item"><span class="legend-dot legend-dot--booked"></span> Dolu — tıkla: detay</span>
+                <span class="legend-item"><span class="legend-dot legend-dot--closed"></span> Kapalı — tıkla: aç</span>
+            </div>
+            <div class="day-actions" id="dayActions"></div>
+            <div class="calendar-wrapper">
+                <div class="calendar-grid" id="calendarGrid">
+                    <div class="slots-loading">Takvim yükleniyor...</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="admin-tab-panel" data-panel="customers" hidden>
+            <div class="crm">
+                <div class="crm-stats" id="crmStats"></div>
+
+                <div class="crm-toolbar">
+                    <div class="crm-search">
+                        <span class="crm-search__icon">🔍</span>
+                        <input type="text" id="crmSearch" placeholder="Ad, soyad veya telefon ara..." autocomplete="off">
+                    </div>
+                    <div class="crm-filters" id="crmFilters"></div>
+                </div>
+
+                <div class="crm-table-wrap">
+                    <table class="crm-table">
+                        <thead id="crmTableHead"></thead>
+                        <tbody id="crmTableBody"></tbody>
+                    </table>
+                    <div class="crm-cards" id="crmCards"></div>
+                    <div class="crm-empty" id="crmEmpty" hidden></div>
+                </div>
+
+                <div class="crm-pagination" id="crmPagination"></div>
+            </div>
+
+            <div class="crm-modal-overlay" id="crmModalOverlay">
+                <div class="crm-modal" role="dialog" aria-modal="true">
+                    <button type="button" class="crm-modal__close" id="crmModalClose" aria-label="Kapat">×</button>
+                    <div class="crm-modal__body" id="crmModalBody"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="admin-tab-panel" data-panel="messages" hidden>
+            <section class="section msg-panel">
+                <div class="sa-card" style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:24px;">
+                    <h2 class="section-title">Toplu Mesaj Gönder</h2>
+                    <p style="color:var(--text-muted);font-size:0.875rem;margin-bottom:16px;">
+                        Kayıtlı müşteri sayısı: <strong id="barberCustomerCount">0</strong>
+                    </p>
+                    <div class="form-group">
+                        <label for="barberTemplateSelect">Mesaj Şablonu</label>
+                        <select id="barberTemplateSelect"></select>
+                    </div>
+                    <div class="form-group" style="margin-top:12px;">
+                        <label for="barberCustomMessage">Özel Mesaj (opsiyonel)</label>
+                        <textarea id="barberCustomMessage" rows="3" placeholder="Şablon yerine özel metin yazabilirsiniz..." style="width:100%;padding:12px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;color:var(--text-primary);font-family:inherit;resize:vertical;"></textarea>
+                    </div>
+                    <div class="form-group" style="margin-top:12px;">
+                        <label>Önizleme</label>
+                        <div class="msg-preview" id="barberMessagePreview">—</div>
+                    </div>
+                    <button type="button" class="btn btn-primary" id="barberSendCampaignBtn" style="margin-top:16px;">Mesajı Gönder</button>
+                </div>
+                <div class="sa-card" style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:24px;">
+                    <h2 class="section-title">Mesaj Geçmişi</h2>
+                    <div class="msg-history" id="barberCampaignHistory"></div>
+                </div>
+            </section>
+        </div>
+
+        <div class="admin-tab-panel" data-panel="hours" hidden>
+            <section class="wh-panel">
+                <div class="wh-card">
+                    <h2 class="wh-card__title">Çalışma Saatleri</h2>
+                    <p class="wh-card__desc">
+                        Açılış ve kapanış saatlerini güncelleyin. Değişiklikler randevu takviminize ve
+                        müşteri randevu sayfasına otomatik yansır.
+                    </p>
+                    <div class="wh-form-row">
+                        <div class="wh-form-group">
+                            <label for="whOpenHour">Açılış Saati</label>
+                            <select id="whOpenHour"></select>
+                        </div>
+                        <div class="wh-form-group">
+                            <label for="whCloseHour">Kapanış Saati</label>
+                            <select id="whCloseHour"></select>
+                        </div>
+                    </div>
+                    <div class="wh-preview">
+                        <span class="wh-preview__label">Oluşturulacak slotlar (1 saatlik)</span>
+                        <div class="wh-preview__chips" id="whSlotPreview"></div>
+                    </div>
+                    <button type="button" class="btn btn-primary" id="whSaveBtn">Çalışma Saatlerini Güncelle</button>
+                </div>
+            </section>
+        </div>
+
+        <div class="admin-tab-panel" data-panel="subscription" hidden>
+            <section class="sub-panel">
+                <div class="sub-card">
+                    <h2 class="section-title">Abonelik / Kod Etkinleştir</h2>
+                    <div class="sub-alert" id="subAlert" hidden></div>
+                    <div class="sub-info-grid">
+                        <div class="sub-info-item">
+                            <span class="sub-info-item__label">Abonelik Durumu</span>
+                            <span class="sub-badge sub-badge--green" id="subBadge">—</span>
+                            <span id="subStatus" hidden>—</span>
+                        </div>
+                        <div class="sub-info-item">
+                            <span class="sub-info-item__label">Bitiş Tarihi</span>
+                            <strong id="subEndDate">—</strong>
+                        </div>
+                        <div class="sub-info-item">
+                            <span class="sub-info-item__label">Kalan Süre</span>
+                            <strong id="subRemaining">—</strong>
+                        </div>
+                    </div>
+                    <div class="sub-activate">
+                        <label for="activationCodeInput">Aktivasyon Kodu</label>
+                        <div class="sub-activate__row">
+                            <input type="text" id="activationCodeInput" placeholder="BRB-AYLIK-XXXXXX" autocomplete="off">
+                            <button type="button" class="btn btn-primary" id="btnActivateCode">Etkinleştir</button>
+                        </div>
+                        <p class="sub-hint">Shopier üzerinden satın aldığınız aktivasyon kodunu buraya girin.</p>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <a href="randevu.html" class="admin-link" id="backToClientLink">← Müşteri Paneline Dön</a>
+    </div>
+
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="modal">
+            <h3 class="modal-title" id="modalTitle">Randevu Detayı</h3>
+            <div id="modalBody"></div>
+            <div class="modal-actions" id="modalActions"></div>
+        </div>
+    </div>
+
+    <div class="sub-warn-modal-overlay" id="subWarningModal" hidden>
+        <div class="sub-warn-modal" role="dialog" aria-modal="true" aria-labelledby="subWarningTitle">
+            <button type="button" class="sub-warn-modal__close" id="subWarningClose" aria-label="Kapat">×</button>
+            <div class="sub-warn-modal__icon">⚠️</div>
+            <h3 class="sub-warn-modal__title" id="subWarningTitle">Aboneliğiniz Bitmek Üzere</h3>
+            <p class="sub-warn-modal__text">
+                Aboneliğinizin bitmesine <strong id="subWarningDays">0</strong> gün kaldı.
+            </p>
+            <p class="sub-warn-modal__hint">
+                Sistemin kesintisiz çalışması için Shopier üzerinden yeni aktivasyon kodu satın alıp
+                <strong>Abonelik</strong> sekmesinden etkinleştirebilirsiniz.
+            </p>
+            <div class="sub-warn-modal__actions">
+                <button type="button" class="btn btn-primary" id="subWarningActivate">Kod Etkinleştir</button>
+                <button type="button" class="btn btn-secondary" id="subWarningLater">Daha Sonra Hatırlat</button>
+                <button type="button" class="sub-warn-modal__ghost" id="subWarningNever">Bir Daha Gösterme</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script type="module" src="admin-auth.js"></script>
+    <script type="module" src="app.js"></script>
+</body>
+</html>
