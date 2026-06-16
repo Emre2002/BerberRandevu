@@ -251,55 +251,63 @@ function getPanelHtml() {
                         <span class="sad-result-count" id="sadResultCount"></span>
                     </div>
 
-                    <div class="sad-toolbar">
-                        <div class="sad-search">
-                            <span class="sad-search__icon">🔍</span>
-                            <input type="text" id="sadSearch" placeholder="Dükkan, telefon, şehir, ilçe veya slug ara..." autocomplete="off">
+                    <div class="sad-toolbar-pro">
+                        <div class="sad-toolbar-pro__row">
+                            <div class="sad-search sad-search--pro">
+                                <span class="sad-search__icon">🔍</span>
+                                <input type="text" id="sadSearch" placeholder="Dükkan, telefon, şehir veya slug ara..." autocomplete="off">
+                            </div>
+                            <label class="sad-select-all">
+                                <input type="checkbox" id="sadSelectAll" aria-label="Tümünü seç">
+                                <span>Tümünü Seç</span>
+                            </label>
                         </div>
-                        <button type="button" class="sad-filters-toggle" id="sadFiltersToggle">⚙️ Filtreler</button>
+                        <div class="sad-toolbar-pro__row sad-toolbar-pro__row--filters">
+                            <div class="sad-filter-block">
+                                <span class="sad-filter-block__label">Durum</span>
+                                <div class="sad-chips sad-chips--toolbar" id="sadStatusChips" data-group="status"></div>
+                            </div>
+                            <div class="sad-filter-block">
+                                <span class="sad-filter-block__label">Abonelik</span>
+                                <div class="sad-chips sad-chips--toolbar" id="sadSubChips" data-group="sub"></div>
+                            </div>
+                        </div>
+                        <div class="sad-toolbar-pro__row sad-toolbar-pro__row--meta">
+                            <div class="sad-meta-filters">
+                                <div class="sad-loc sad-loc--compact">
+                                    <span class="sad-filter-block__label">Şehir</span>
+                                    <div class="sa-select" id="sadCitySelect"></div>
+                                </div>
+                                <div class="sad-loc sad-loc--compact">
+                                    <span class="sad-filter-block__label">İlçe</span>
+                                    <div class="sa-select" id="sadDistrictSelect"></div>
+                                </div>
+                                <div class="sad-loc sad-loc--compact">
+                                    <span class="sad-filter-block__label">Sıralama</span>
+                                    <select id="sadSort" class="sad-select-native sad-select-native--compact">
+                                        <optgroup label="Operasyonel">
+                                            <option value="newest">En Yeni Eklenen</option>
+                                            <option value="oldest">En Eski Eklenen</option>
+                                            <option value="az">A → Z</option>
+                                            <option value="za">Z → A</option>
+                                            <option value="subSoonest">Aboneliği En Yakın Bitecek</option>
+                                            <option value="subLatest">Aboneliği En Geç Bitecek</option>
+                                        </optgroup>
+                                        <optgroup label="Kullanım">
+                                            <option value="mostCustomers">En Çok Müşterisi Olan</option>
+                                            <option value="leastCustomers">En Az Müşterisi Olan</option>
+                                            <option value="mostAppointments">En Çok Randevusu Olan</option>
+                                            <option value="leastAppointments">En Az Randevusu Olan</option>
+                                            <option value="mostRevenue">En Çok Gelir Üreten</option>
+                                            <option value="leastRevenue">En Az Gelir Üreten</option>
+                                        </optgroup>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
-                    <div class="sad-filters" id="sadFilters">
-                        <div class="sad-filter-group">
-                            <span class="sad-filter-group__label">Durum</span>
-                            <div class="sad-chips" id="sadStatusChips" data-group="status"></div>
-                        </div>
-                        <div class="sad-filter-group">
-                            <span class="sad-filter-group__label">Abonelik</span>
-                            <div class="sad-chips" id="sadSubChips" data-group="sub"></div>
-                        </div>
-                        <div class="sad-filter-group sad-filter-group--row">
-                            <div class="sad-loc">
-                                <span class="sad-filter-group__label">Şehir</span>
-                                <div class="sa-select" id="sadCitySelect"></div>
-                            </div>
-                            <div class="sad-loc">
-                                <span class="sad-filter-group__label">İlçe</span>
-                                <div class="sa-select" id="sadDistrictSelect"></div>
-                            </div>
-                            <div class="sad-loc">
-                                <span class="sad-filter-group__label">Sıralama</span>
-                                <select id="sadSort" class="sad-select-native">
-                                    <optgroup label="Operasyonel">
-                                        <option value="newest">En Yeni Eklenen</option>
-                                        <option value="oldest">En Eski Eklenen</option>
-                                        <option value="az">A → Z</option>
-                                        <option value="za">Z → A</option>
-                                        <option value="subSoonest">Aboneliği En Yakın Bitecek</option>
-                                        <option value="subLatest">Aboneliği En Geç Bitecek</option>
-                                    </optgroup>
-                                    <optgroup label="Kullanım">
-                                        <option value="mostCustomers">En Çok Müşterisi Olan</option>
-                                        <option value="leastCustomers">En Az Müşterisi Olan</option>
-                                        <option value="mostAppointments">En Çok Randevusu Olan</option>
-                                        <option value="leastAppointments">En Az Randevusu Olan</option>
-                                        <option value="mostRevenue">En Çok Gelir Üreten</option>
-                                        <option value="leastRevenue">En Az Gelir Üreten</option>
-                                    </optgroup>
-                                </select>
-                            </div>
-                        </div>
-                    </div>
+                    <div class="sad-filters sad-filters--legacy" id="sadFilters" hidden></div>
 
                     <div class="sad-bulkbar" id="sadBulkBar" hidden>
                         <span class="sad-bulkbar__count"><strong id="sadSelectedCount">0</strong> dükkan seçili</span>
@@ -312,18 +320,18 @@ function getPanelHtml() {
                         </div>
                     </div>
 
-                    <div class="sa-table-wrap sad-table-wrap">
+                    <div class="sa-table-wrap sad-table-wrap sad-table-wrap--legacy" hidden>
                         <table class="sa-table sad-table">
                             <thead><tr>
-                                <th class="sad-col-check"><input type="checkbox" id="sadSelectAll" aria-label="Tümünü seç"></th>
+                                <th class="sad-col-check"></th>
                                 <th>Dükkan</th><th>Konum</th><th>Telefon</th>
                                 <th>Abonelik</th><th>Bitiş</th><th>Kalan</th>
                                 <th>Durum</th><th>İşlemler</th>
                             </tr></thead>
-                            <tbody id="barbersTableBody"><tr><td colspan="9" class="sa-loading">Yükleniyor...</td></tr></tbody>
+                            <tbody id="barbersTableBody"></tbody>
                         </table>
                     </div>
-                    <div class="sad-cards" id="sadCards"></div>
+                    <div class="sad-cards sad-cards--grid" id="sadCards"></div>
                 </section>
             </div>
             <div class="sa-tab-panel" data-panel="codes" hidden>
@@ -698,96 +706,98 @@ function subBadge(sub) {
         green: { cls: "green", label: "Aktif" }
     };
     const m = map[sub.key] || map.green;
-    return `<span class="sad-sub sad-sub--${m.cls}">${m.label}</span>`;
-}
-function remainingCell(sub) {
-    if (sub.key === "expired") return `<span class="sad-days sad-days--expired">Doldu</span>`;
-    const cls = sub.days <= 7 ? "red" : (sub.days <= 30 ? "orange" : "green");
-    return `<span class="sad-days sad-days--${cls}">${sub.days} gün</span>`;
+    return `<span class="sad-pill sad-pill--sub-${m.cls}">${m.label}</span>`;
 }
 
-function statusToggleBtn(b) {
+function shopStatusBadge(b) {
     const status = b.status || "active";
-    return status === "active"
-        ? `<button class="sa-btn sa-btn--status sa-btn--status-active" data-action="toggle" data-slug="${b.slug}" data-status="${status}">🟢 Aktif</button>`
-        : `<button class="sa-btn sa-btn--status sa-btn--status-passive" data-action="toggle" data-slug="${b.slug}" data-status="${status}">🔴 Pasif</button>`;
+    const map = {
+        active: { cls: "active", label: "Aktif" },
+        passive: { cls: "passive", label: "Pasif" },
+        suspended: { cls: "suspended", label: "Askıda" },
+        pending: { cls: "pending", label: "Onay Bekleyen" }
+    };
+    const m = map[status] || map.active;
+    return `<span class="sad-pill sad-pill--shop-${m.cls}">${m.label}</span>`;
 }
 
-function actionsMenuHtml(b) {
+function shopAvatarHtml(b) {
+    const name = getBarberName(b);
+    if (b.logoUrl) {
+        return `<img src="${escapeHtml(b.logoUrl)}" alt="" class="sad-shop-card__logo" loading="lazy">`;
+    }
+    const initial = (name || b.slug || "?").charAt(0).toUpperCase();
+    return `<div class="sad-shop-card__avatar" aria-hidden="true">${escapeHtml(initial)}</div>`;
+}
+
+function remainingDaysHtml(sub) {
+    if (sub.key === "expired") {
+        return `<span class="sad-remain sad-remain--expired">⏳ Doldu</span>`;
+    }
+    if (sub.days === 0) {
+        return `<span class="sad-remain sad-remain--today">⚠ Bugün Bitiyor</span>`;
+    }
+    let tone = "mild";
+    if (sub.days >= 60) tone = "green";
+    else if (sub.days < 7) tone = "red";
+    else if (sub.days < 30) tone = "orange";
+    return `<span class="sad-remain sad-remain--${tone}">⏳ ${sub.days} Gün</span>`;
+}
+
+function shopActionsBar(b) {
     if (!b.slug) {
-        return `<span class="sad-quick__disabled" title="Slug bulunamadı">⚠️</span>`;
+        return `<p class="sad-act-disabled">Bu dükkan için slug bulunamadı.</p>`;
     }
     const baseAdmin = getAdminUrl(b.slug);
     const adminUrl = escapeHtml(baseAdmin ? `${baseAdmin}&fromSuperAdmin=true` : "#");
     const bookingUrl = escapeHtml(getBookingUrl(b.slug) || "#");
     const status = b.status || "active";
-    const toggleLabel = status === "active" ? "🔴 Pasif Et" : "🟢 Aktif Et";
-    return `<div class="sad-actions">
-        <div class="sad-quick sad-quick--compact">
-            <a href="${adminUrl}" target="_blank" rel="noopener noreferrer" class="sad-quick__btn sad-quick__btn--admin" title="Admin">⚙️</a>
-            <a href="${bookingUrl}" target="_blank" rel="noopener noreferrer" class="sad-quick__btn sad-quick__btn--booking" title="Randevu">📅</a>
-        </div>
-        <div class="sad-menu">
-            <button type="button" class="sad-menu__trigger" aria-label="İşlemler">⋮</button>
-            <div class="sad-menu__panel" hidden>
-                <button type="button" class="sad-menu__item" data-action="edit" data-slug="${escapeHtml(b.slug)}">✏️ Düzenle</button>
-                <button type="button" class="sad-menu__item" data-action="copy" data-slug="${escapeHtml(b.slug)}">🔗 Link Kopyala</button>
-                <button type="button" class="sad-menu__item" data-action="toggle" data-slug="${escapeHtml(b.slug)}" data-status="${status}">${toggleLabel}</button>
-                <button type="button" class="sad-menu__item sad-menu__item--danger" data-action="delete" data-slug="${escapeHtml(b.slug)}">🗑️ Sil</button>
-            </div>
-        </div>
-    </div>`;
-}
+    const toggleLabel = status === "active" ? "Pasif Et" : "Aktif Et";
+    const toggleIcon = status === "active" ? "🔴" : "🟢";
+    const slug = escapeHtml(b.slug);
 
-function rowHtml(b) {
-    const checked = dashView.selected.has(b.slug) ? "checked" : "";
-    const loc = [b.city, b.district].filter(Boolean).join(" / ") || "—";
-    return `<tr>
-        <td class="sad-col-check"><input type="checkbox" class="sad-row-check" data-check-slug="${b.slug}" ${checked}></td>
-        <td class="sad-col-shop"><div class="sad-shop"><span class="sad-shop__name">${escapeHtml(getBarberName(b))}</span><span class="sad-shop__slug">${escapeHtml(b.slug)}</span></div></td>
-        <td class="sad-col-loc" title="${escapeHtml(loc)}">${escapeHtml(loc)}</td>
-        <td class="sad-col-phone">${escapeHtml(b.phone || "—")}</td>
-        <td class="sad-col-sub">${subBadge(b._sub)}</td>
-        <td class="sad-col-date">${b.subscriptionEndDate ? formatDateTR(b.subscriptionEndDate) : "—"}</td>
-        <td class="sad-col-days">${remainingCell(b._sub)}</td>
-        <td class="sad-col-status">${statusToggleBtn(b)}</td>
-        <td class="sad-col-actions">${actionsMenuHtml(b)}</td>
-    </tr>`;
+    return `<div class="sad-act-bar">
+        <a href="${adminUrl}" target="_blank" rel="noopener noreferrer" class="sad-act-btn sad-act-btn--admin"><span aria-hidden="true">⚙️</span> Admin</a>
+        <a href="${bookingUrl}" target="_blank" rel="noopener noreferrer" class="sad-act-btn sad-act-btn--booking"><span aria-hidden="true">📅</span> Randevu</a>
+        <button type="button" class="sad-act-btn sad-act-btn--edit" data-action="edit" data-slug="${slug}"><span aria-hidden="true">✏️</span> Düzenle</button>
+        <button type="button" class="sad-act-btn sad-act-btn--copy" data-action="copy" data-slug="${slug}"><span aria-hidden="true">🔗</span> Kopyala</button>
+        <button type="button" class="sad-act-btn sad-act-btn--toggle" data-action="toggle" data-slug="${slug}" data-status="${status}"><span aria-hidden="true">${toggleIcon}</span> ${toggleLabel}</button>
+        <button type="button" class="sad-act-btn sad-act-btn--delete" data-action="delete" data-slug="${slug}"><span aria-hidden="true">🗑️</span> Sil</button>
+    </div>`;
 }
 
 function cardHtml(b) {
     const checked = dashView.selected.has(b.slug) ? "checked" : "";
+    const selectedClass = dashView.selected.has(b.slug) ? " is-selected" : "";
     const loc = [b.city, b.district].filter(Boolean).join(" / ") || "—";
-    const baseAdmin = getAdminUrl(b.slug);
-    const adminUrl = escapeHtml(baseAdmin ? `${baseAdmin}&fromSuperAdmin=true` : "#");
-    const bookingUrl = escapeHtml(getBookingUrl(b.slug) || "#");
-    const status = b.status || "active";
-    const toggleLabel = status === "active" ? "🔴 Pasif Et" : "🟢 Aktif Et";
-    return `<div class="sad-card">
-        <div class="sad-card__head">
-            <label class="sad-card__check"><input type="checkbox" class="sad-row-check" data-check-slug="${b.slug}" ${checked}></label>
-            <div class="sad-card__title">
-                <span class="sad-shop__name">${escapeHtml(getBarberName(b))}</span>
-                <span class="sad-shop__slug">${escapeHtml(b.slug)}</span>
+
+    return `<article class="sad-shop-card${selectedClass}">
+        <div class="sad-shop-card__top">
+            <label class="sad-shop-card__check" title="Seç">
+                <input type="checkbox" class="sad-row-check sad-check-pro" data-check-slug="${b.slug}" ${checked}>
+            </label>
+            ${shopAvatarHtml(b)}
+            <div class="sad-shop-card__identity">
+                <h3 class="sad-shop-card__name">${escapeHtml(getBarberName(b))}</h3>
+                <p class="sad-shop-card__slug">${escapeHtml(b.slug)}</p>
             </div>
-            ${subBadge(b._sub)}
+            <div class="sad-shop-card__badges">
+                ${shopStatusBadge(b)}
+                ${subBadge(b._sub)}
+            </div>
         </div>
-        <div class="sad-card__grid">
-            <div><span>Konum</span><strong>${escapeHtml(loc)}</strong></div>
-            <div><span>Telefon</span><strong>${escapeHtml(b.phone || "—")}</strong></div>
-            <div><span>Kalan</span><strong>${remainingCell(b._sub)}</strong></div>
-            <div><span>Bitiş</span><strong>${b.subscriptionEndDate ? formatDateTR(b.subscriptionEndDate) : "—"}</strong></div>
+        <div class="sad-shop-card__body">
+            <div class="sad-shop-card__col">
+                <div class="sad-meta-row"><span class="sad-meta-row__ico">📍</span><span>${escapeHtml(loc)}</span></div>
+                <div class="sad-meta-row"><span class="sad-meta-row__ico">📞</span><span>${escapeHtml(b.phone || "—")}</span></div>
+            </div>
+            <div class="sad-shop-card__col">
+                <div class="sad-meta-row"><span class="sad-meta-row__ico">📅</span><span>${b.subscriptionEndDate ? formatDateTR(b.subscriptionEndDate) : "—"}</span></div>
+                <div class="sad-meta-row sad-meta-row--days">${remainingDaysHtml(b._sub)}</div>
+            </div>
         </div>
-        <div class="sad-card__status-row">${statusToggleBtn(b)}</div>
-        <div class="sad-card__btn-grid">
-            <a href="${adminUrl}" target="_blank" rel="noopener noreferrer" class="sad-card__btn sad-card__btn--admin">⚙️ Admin</a>
-            <a href="${bookingUrl}" target="_blank" rel="noopener noreferrer" class="sad-card__btn sad-card__btn--booking">📅 Randevu</a>
-            <button type="button" class="sad-card__btn" data-action="edit" data-slug="${b.slug}">✏️ Düzenle</button>
-            <button type="button" class="sad-card__btn" data-action="copy" data-slug="${b.slug}" ${!b.slug ? "disabled" : ""}>🔗 Kopyala</button>
-            <button type="button" class="sad-card__btn" data-action="toggle" data-slug="${b.slug}" data-status="${status}">${toggleLabel}</button>
-            <button type="button" class="sad-card__btn sad-card__btn--danger" data-action="delete" data-slug="${b.slug}">🗑️ Sil</button>
-        </div>
-    </div>`;
+        ${shopActionsBar(b)}
+    </article>`;
 }
 
 function renderBulkBar() {
@@ -799,27 +809,24 @@ function renderBulkBar() {
 }
 
 function renderBarberTable() {
-    const tbody = document.getElementById("barbersTableBody");
     const cardsHost = document.getElementById("sadCards");
     const countEl = document.getElementById("sadResultCount");
-    if (!tbody) return;
+    if (!cardsHost) return;
 
     const list = getDashView();
     if (countEl) countEl.textContent = `${list.length} / ${barbersCache.length} dükkan`;
 
     if (!list.length) {
         const msg = barbersCache.length ? "Filtreye uygun dükkan bulunamadı." : "Henüz berber yok.";
-        tbody.innerHTML = `<tr><td colspan="9" class="sa-table__empty">${msg}</td></tr>`;
-        if (cardsHost) cardsHost.innerHTML = `<div class="sa-table__empty">${msg}</div>`;
+        cardsHost.innerHTML = `<div class="sad-empty-state">${msg}</div>`;
         renderBulkBar();
         return;
     }
 
-    tbody.innerHTML = list.map(rowHtml).join("");
-    if (cardsHost) cardsHost.innerHTML = list.map(cardHtml).join("");
+    cardsHost.innerHTML = list.map(cardHtml).join("");
 
     const selAll = document.getElementById("sadSelectAll");
-    if (selAll) selAll.checked = list.every((b) => dashView.selected.has(b.slug));
+    if (selAll) selAll.checked = list.length > 0 && list.every((b) => dashView.selected.has(b.slug));
 
     renderBulkBar();
 }
@@ -969,9 +976,6 @@ function bindDashboardEvents() {
         renderBarberTable();
     });
 
-    document.getElementById("sadFiltersToggle")?.addEventListener("click", () => {
-        document.getElementById("sadFilters")?.classList.toggle("sad-filters--open");
-    });
 
     document.getElementById("sadStatusChips")?.addEventListener("click", (e) => {
         const c = e.target.closest("[data-status]"); if (!c) return;
@@ -1001,10 +1005,15 @@ function bindDashboardEvents() {
     function onRowCheck(e) {
         const c = e.target.closest(".sad-row-check"); if (!c) return;
         const slug = c.dataset.checkSlug;
-        if (c.checked) dashView.selected.add(slug); else dashView.selected.delete(slug);
-        renderBarberTable();
+        if (c.checked) dashView.selected.add(slug);
+        else dashView.selected.delete(slug);
+        const card = c.closest(".sad-shop-card");
+        if (card) card.classList.toggle("is-selected", c.checked);
+        renderBulkBar();
+        const view = getDashView();
+        const selAll = document.getElementById("sadSelectAll");
+        if (selAll) selAll.checked = view.length > 0 && view.every((b) => dashView.selected.has(b.slug));
     }
-    document.getElementById("barbersTableBody")?.addEventListener("change", onRowCheck);
     document.getElementById("sadCards")?.addEventListener("change", onRowCheck);
 
     document.getElementById("sadBulkBar")?.addEventListener("click", (e) => {

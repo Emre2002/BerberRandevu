@@ -49,24 +49,18 @@
 .crm-stat--gold .crm-stat__icon { background: rgba(212,168,83,.18); }
 .crm-stat--danger .crm-stat__icon { background: rgba(239,68,68,.15); }
 
-/* --- Araç çubuğu (sabit/sticky) --- */
+/* --- Araç çubuğu --- */
 .crm-toolbar {
-    position: sticky;
-    top: 0;
-    z-index: 20;
     display: flex;
-    flex-wrap: wrap;
-    align-items: center;
+    flex-direction: column;
     gap: 12px;
-    padding: 12px 0;
-    background: var(--bg-primary, #0a0a0f);
-    background: var(--bg-secondary);
-    border-radius: var(--radius-sm);
+    padding: 0;
+    max-width: 100%;
 }
 
 .crm-search {
     position: relative;
-    flex: 1 1 240px;
+    width: 100%;
     min-width: 0;
 }
 .crm-search__icon {
@@ -85,11 +79,17 @@
 }
 .crm-search input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow, rgba(59,130,246,.2)); }
 
-.crm-filters { display: flex; flex-wrap: wrap; gap: 8px; }
+.crm-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    width: 100%;
+}
 
 .crm-filter {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 7px;
     padding: 9px 12px;
     min-height: 40px;
@@ -114,6 +114,16 @@
     color: var(--text-muted);
 }
 .crm-filter.active .crm-filter__count { background: var(--accent); color: #fff; }
+
+/* --- Liste alanı --- */
+.crm-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+    max-width: 100%;
+    min-height: 0;
+}
 
 /* --- Tablo (masaüstü) --- */
 .crm-table-wrap {
@@ -179,8 +189,17 @@
 .crm-badge--vip { background: rgba(212,168,83,.16); color: #e9c46a; border: 1px solid rgba(212,168,83,.35); }
 
 /* --- Kart görünümü (mobil) --- */
-.crm-cards { display: none; flex-direction: column; gap: 10px; padding: 10px; }
+.crm-cards {
+    display: none;
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+    max-width: 100%;
+}
+
 .crm-card {
+    width: 100%;
+    box-sizing: border-box;
     background: var(--bg-secondary);
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
@@ -246,9 +265,22 @@
 .crm-card__btn--disabled { opacity: .45; cursor: not-allowed; pointer-events: none; }
 
 /* --- Boş / yükleniyor durumları --- */
-.crm-empty { text-align: center; padding: 48px 20px; color: var(--text-muted); }
-.crm-empty__icon { font-size: 2rem; margin-bottom: 10px; }
-.crm-loading { padding: 28px; text-align: center; color: var(--text-muted); font-size: 0.875rem; }
+.crm-empty {
+    text-align: center;
+    padding: 28px 16px;
+    color: var(--text-muted);
+    background: var(--bg-card);
+    border: 1px dashed var(--border);
+    border-radius: var(--radius-sm);
+}
+.crm-empty[hidden] { display: none !important; }
+.crm-empty__icon { font-size: 1.75rem; margin-bottom: 8px; }
+.crm-loading {
+    padding: 20px 16px;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.875rem;
+}
 
 /* --- Sayfalama --- */
 .crm-pagination { display: flex; align-items: center; justify-content: center; gap: 14px; flex-wrap: wrap; min-height: 20px; }
@@ -370,17 +402,57 @@
     .crm-stat { padding: 13px; }
     .crm-stat__value { font-size: 1.25rem; }
 
-    /* Tabloyu gizle, kart görünümüne geç */
-    .crm-table-wrap { display: none; }
-    .crm-cards { display: flex; width: 100%; padding: 0; }
+    .crm-toolbar { gap: 10px; }
 
-    .crm-toolbar { flex-direction: column; align-items: stretch; padding: 10px 0; }
-    .crm-filters { flex-wrap: wrap; overflow-x: visible; padding-bottom: 0; }
-    .crm-filter { flex: 1 1 calc(50% - 4px); justify-content: center; min-height: 44px; }
+    .crm-filters {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+    }
+
+    .crm-filter {
+        width: 100%;
+        min-height: 44px;
+        border-radius: var(--radius-sm);
+        white-space: normal;
+        text-align: center;
+    }
+
+    .crm-filter:last-child:nth-child(odd) {
+        grid-column: 1 / -1;
+        max-width: 50%;
+        justify-self: start;
+    }
+
+    .crm-table-wrap { display: none; }
+    .crm-cards { display: flex; }
+
+    .crm-card__grid-mobile {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
 
     .crm-detail__grid { grid-template-columns: repeat(2, 1fr); }
     .crm-modal__body { padding: 18px; }
-    .crm-page-btn { min-height: 44px; }
+    .crm-page-btn { min-height: 44px; width: 100%; max-width: 160px; }
+    .crm-pagination { padding: 8px 0 4px; }
+}
+
+@media (min-width: 769px) {
+    .crm-toolbar {
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: center;
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        padding: 12px 0;
+        background: var(--bg-secondary);
+        border-radius: var(--radius-sm);
+    }
+
+    .crm-search {
+        flex: 1 1 240px;
+    }
 }
 
 @media (max-width: 380px) {

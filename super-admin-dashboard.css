@@ -39,7 +39,112 @@
 }
 .sad-result-count { font-size: 0.8rem; color: var(--sa-text-muted); }
 
-/* --- Araç çubuğu (arama + mobil filtre tetik) --- */
+/* --- Araç çubuğu (arama + filtreler) --- */
+.sad-toolbar-pro {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 16px;
+    padding: 14px 16px;
+    background: var(--sa-bg-card);
+    border: 1px solid var(--sa-border);
+    border-radius: var(--sa-radius);
+}
+
+.sad-toolbar-pro__row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    min-width: 0;
+}
+
+.sad-toolbar-pro__row--filters {
+    align-items: flex-start;
+    gap: 16px;
+}
+
+.sad-toolbar-pro__row--meta {
+    justify-content: space-between;
+}
+
+.sad-search--pro { flex: 1; min-width: 200px; }
+
+.sad-select-all {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border: 1px solid var(--sa-border);
+    border-radius: var(--sa-radius-sm);
+    background: var(--sa-bg-elevated);
+    color: var(--sa-text-muted);
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: border-color var(--sa-transition), color var(--sa-transition);
+}
+
+.sad-select-all:hover { border-color: var(--sa-accent); color: var(--sa-text); }
+
+.sad-select-all input {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--sa-accent);
+    cursor: pointer;
+}
+
+.sad-filter-block {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+    flex: 1;
+}
+
+.sad-filter-block__label {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: var(--sa-text-muted);
+    font-weight: 600;
+}
+
+.sad-chips--toolbar { flex-wrap: wrap; gap: 6px; }
+
+.sad-meta-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    flex: 1;
+    min-width: 0;
+}
+
+.sad-loc--compact { min-width: 140px; flex: 1; }
+
+.sad-select-native--compact {
+    width: 100%;
+    padding: 8px 10px;
+    font-size: 0.8rem;
+}
+
+.sad-filters-toggle {
+    padding: 8px 14px;
+    background: var(--sa-bg-elevated);
+    border: 1px solid var(--sa-border);
+    border-radius: var(--sa-radius-sm);
+    color: var(--sa-text-muted);
+    font-family: inherit;
+    font-size: 0.8rem;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: border-color var(--sa-transition), color var(--sa-transition);
+}
+
+.sad-filters-toggle:hover { border-color: var(--sa-accent); color: var(--sa-text); }
+
+/* Eski toolbar (geri uyumluluk) */
 .sad-toolbar { display: flex; gap: 12px; align-items: center; margin-bottom: 14px; }
 .sad-search { position: relative; flex: 1; min-width: 0; }
 .sad-search__icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); opacity: .6; pointer-events: none; }
@@ -54,14 +159,13 @@
     font-size: 0.9rem;
 }
 .sad-search input:focus { outline: none; border-color: var(--sa-accent); box-shadow: 0 0 0 3px var(--sa-accent-glow); }
-.sad-filters-toggle {
-    display: none;
-    padding: 11px 16px;
-    background: var(--sa-bg-card);
-    border: 1px solid var(--sa-border);
-    border-radius: var(--sa-radius-sm);
-    color: var(--sa-text);
-    font-family: inherit; font-size: 0.875rem; cursor: pointer; white-space: nowrap;
+
+.sad-check-pro {
+    width: 20px;
+    height: 20px;
+    accent-color: var(--sa-accent);
+    cursor: pointer;
+    flex-shrink: 0;
 }
 
 /* --- Filtre paneli --- */
@@ -284,8 +388,246 @@
 .sad-days--red { color: #f87171; }
 .sad-days--expired { color: #fca5a5; }
 
-/* --- Mobil kart görünümü (varsayılan gizli) --- */
-.sad-cards { display: none; flex-direction: column; gap: 12px; }
+/* --- Dükkan kartları (SaaS CRM) --- */
+.sad-cards--grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+    gap: 16px;
+    width: 100%;
+    max-width: 100%;
+}
+
+.sad-empty-state {
+    grid-column: 1 / -1;
+    padding: 40px 20px;
+    text-align: center;
+    color: var(--sa-text-muted);
+    font-size: 0.9rem;
+    background: var(--sa-bg-elevated);
+    border: 1px dashed var(--sa-border);
+    border-radius: var(--sa-radius);
+}
+
+.sad-shop-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px 14px;
+    background: var(--sa-bg-elevated);
+    border: 1px solid var(--sa-border);
+    border-radius: 12px;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.sad-shop-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+    border-color: var(--sa-border-hover);
+}
+
+.sad-shop-card.is-selected {
+    border-color: var(--sa-accent);
+    background: rgba(99, 102, 241, 0.06);
+    box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.25);
+}
+
+.sad-shop-card__top {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    flex-wrap: wrap;
+}
+
+.sad-shop-card__check {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2px;
+    cursor: pointer;
+}
+
+.sad-shop-card__logo,
+.sad-shop-card__avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    flex-shrink: 0;
+    object-fit: cover;
+}
+
+.sad-shop-card__avatar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.35), rgba(59, 130, 246, 0.25));
+    color: #e0e7ff;
+    font-weight: 700;
+    font-size: 1rem;
+}
+
+.sad-shop-card__identity {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1;
+}
+
+.sad-shop-card__name {
+    margin: 0;
+    font-size: 0.92rem;
+    font-weight: 700;
+    color: var(--sa-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.sad-shop-card__slug {
+    margin: 0;
+    font-size: 0.72rem;
+    color: var(--sa-text-muted);
+    font-family: ui-monospace, monospace;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.sad-shop-card__badges {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.sad-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+    line-height: 1.4;
+}
+
+.sad-pill--shop-active { background: rgba(34, 197, 94, 0.16); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.35); }
+.sad-pill--shop-passive { background: rgba(239, 68, 68, 0.14); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.35); }
+.sad-pill--shop-suspended { background: rgba(168, 85, 247, 0.16); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.35); }
+.sad-pill--shop-pending { background: rgba(234, 179, 8, 0.14); color: #facc15; border: 1px solid rgba(234, 179, 8, 0.35); }
+
+.sad-pill--sub-green { background: rgba(34, 197, 94, 0.12); color: #86efac; }
+.sad-pill--sub-orange { background: rgba(249, 115, 22, 0.14); color: #fdba74; }
+.sad-pill--sub-red { background: rgba(239, 68, 68, 0.14); color: #fca5a5; }
+.sad-pill--sub-expired { background: rgba(127, 29, 29, 0.35); color: #fecaca; border: 1px solid rgba(239, 68, 68, 0.4); }
+
+.sad-shop-card__body {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px 14px;
+    padding: 8px 0 4px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.sad-shop-card__col {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+}
+
+.sad-meta-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.8rem;
+    color: var(--sa-text);
+    min-width: 0;
+}
+
+.sad-meta-row__ico {
+    flex-shrink: 0;
+    font-size: 0.85rem;
+    opacity: 0.85;
+}
+
+.sad-meta-row span:last-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.sad-meta-row--days { font-weight: 700; }
+
+.sad-remain { font-weight: 700; font-variant-numeric: tabular-nums; }
+.sad-remain--green { color: #4ade80; }
+.sad-remain--mild { color: #a3e635; }
+.sad-remain--orange { color: #fb923c; }
+.sad-remain--red { color: #f87171; }
+.sad-remain--today { color: #fbbf24; font-size: 0.82rem; }
+.sad-remain--expired { color: #fca5a5; }
+
+/* --- Aksiyon butonları --- */
+.sad-act-bar {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    padding-top: 2px;
+}
+
+@media (min-width: 900px) {
+    .sad-act-bar {
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+    }
+}
+
+.sad-act-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 34px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    font-family: inherit;
+    font-size: 0.74rem;
+    font-weight: 700;
+    text-decoration: none;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: transform 0.2s ease, filter 0.2s ease, background 0.2s ease, border-color 0.2s ease;
+}
+
+.sad-act-btn:hover { transform: translateY(-1px); filter: brightness(1.08); }
+.sad-act-btn:active { transform: translateY(0); }
+
+.sad-act-btn--admin { background: #2563eb; color: #eff6ff; border-color: #3b82f6; }
+.sad-act-btn--booking { background: #7c3aed; color: #f5f3ff; border-color: #8b5cf6; }
+.sad-act-btn--edit { background: #ea580c; color: #fff7ed; border-color: #f97316; }
+.sad-act-btn--copy { background: #4b5563; color: #f3f4f6; border-color: #6b7280; }
+.sad-act-btn--toggle { background: #dc2626; color: #fef2f2; border-color: #ef4444; }
+.sad-act-btn--delete { background: #7f1d1d; color: #fecaca; border-color: #991b1b; }
+
+.sad-act-disabled {
+    margin: 0;
+    font-size: 0.78rem;
+    color: var(--sa-text-muted);
+    text-align: center;
+    padding: 8px;
+}
+
+/* Eski kart stilleri (geri uyumluluk) */
+.sad-cards { display: grid; gap: 16px; width: 100%; }
 .sad-card {
     background: var(--sa-bg-elevated);
     border: 1px solid var(--sa-border);
@@ -342,40 +684,56 @@
    ============================================================ */
 @media (max-width: 1280px) {
     .sa-stats--dash { grid-template-columns: repeat(4, 1fr); }
+    .sad-cards--grid { grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
 }
 @media (max-width: 980px) {
     .sad-filter-group--row { grid-template-columns: 1fr; }
+    .sad-toolbar-pro__row--filters { flex-direction: column; }
+    .sad-meta-filters { width: 100%; }
 }
 @media (max-width: 768px) {
     .sa-stats--dash { grid-template-columns: repeat(2, 1fr); }
     .sa-panel { padding: 16px 10px 32px; }
 
-    /* Tablo gizlenir, kart görünümü gelir */
-    .sad-table-wrap { display: none; }
-    .sad-cards { display: flex; width: 100%; }
+    .sad-cards--grid {
+        grid-template-columns: 1fr;
+        gap: 16px;
+    }
+
+    .sad-toolbar-pro { padding: 12px; }
+    .sad-toolbar-pro__row { flex-direction: column; align-items: stretch; }
+    .sad-select-all { justify-content: center; }
+
+    .sad-toolbar-pro__row--meta { flex-direction: column; align-items: stretch; }
+    .sad-meta-filters { flex-direction: column; }
+    .sad-loc--compact { min-width: 0; width: 100%; }
+
+    .sad-shop-card__badges {
+        margin-left: auto;
+        flex-direction: row;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+    }
+
+    .sad-act-bar {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+    }
+
+    .sad-act-btn {
+        min-height: 40px;
+        font-size: 0.78rem;
+    }
 
     .sad-toolbar-head { justify-content: stretch; }
     .sad-toolbar-head .sa-btn { width: 100%; }
 
-    /* Filtreler collapsible */
-    .sad-filters-toggle { display: inline-block; min-height: 44px; }
-    .sad-filters {
-        display: none;
-        background: var(--sa-bg-card);
-        border: 1px solid var(--sa-border);
-        border-radius: var(--sa-radius-sm);
-        padding: 14px;
-    }
-    .sad-filters.sad-filters--open { display: flex; }
-    .sad-chips { flex-wrap: wrap; overflow-x: visible; padding-bottom: 0; }
-    .sad-chip { min-height: 40px; }
+    .sad-chips { flex-wrap: wrap; overflow-x: visible; }
+    .sad-chip { min-height: 36px; }
 }
-@media (max-width: 1100px) {
-    .sad-quick--compact { display: none; }
-    .sad-col-actions { width: 56px; }
-}
-
 @media (max-width: 420px) {
     .sa-stats--dash { grid-template-columns: 1fr 1fr; }
-    .sad-card__btn-grid { grid-template-columns: 1fr; }
+    .sad-shop-card__body { grid-template-columns: 1fr; }
+    .sad-meta-row span:last-child { white-space: normal; }
 }

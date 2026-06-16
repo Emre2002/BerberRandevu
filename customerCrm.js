@@ -182,6 +182,10 @@ export function initCustomerCrm(barberSlug) {
     // --- render -------------------------------------------------------------
 
     function renderLoading() {
+        if (el.empty) {
+            el.empty.hidden = true;
+            el.empty.innerHTML = "";
+        }
         if (el.tableBody) {
             el.tableBody.innerHTML = `<tr><td colspan="6" class="crm-loading">Müşteriler yükleniyor...</td></tr>`;
         }
@@ -252,6 +256,25 @@ export function initCustomerCrm(barberSlug) {
         </tr>`;
     }
 
+    function getEmptyMessage() {
+        if (allCustomers.length === 0) {
+            return "Henüz müşteri kaydı yok. Randevular oluştukça otomatik eklenecek.";
+        }
+        if (state.search.trim()) {
+            return "Arama sonucunda müşteri bulunamadı.";
+        }
+        const filterLabels = {
+            active: "Aktif",
+            risky: "Riskli",
+            lost: "Kaybedilmiş",
+            vip: "VIP"
+        };
+        if (state.filter !== "all" && filterLabels[state.filter]) {
+            return `Bu filtrede (${filterLabels[state.filter]}) müşteri bulunamadı.`;
+        }
+        return "Müşteri bulunamadı.";
+    }
+
     function renderList() {
         const list = getFilteredSorted();
         const totalPages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
@@ -261,15 +284,19 @@ export function initCustomerCrm(barberSlug) {
 
         const showEmpty = list.length === 0;
         if (el.empty) {
-            el.empty.hidden = !showEmpty;
             if (showEmpty) {
-                el.empty.innerHTML = `<div class="crm-empty__icon">🔍</div>
-                    <p>${allCustomers.length === 0 ? "Henüz müşteri kaydı yok. Randevular oluştukça otomatik eklenecek." : "Aramanıza uygun müşteri bulunamadı."}</p>`;
+                el.empty.hidden = false;
+                el.empty.innerHTML = `<div class="crm-empty__icon">🔍</div><p>${getEmptyMessage()}</p>`;
+            } else {
+                el.empty.hidden = true;
+                el.empty.innerHTML = "";
             }
         }
 
         if (el.tableBody) {
-            el.tableBody.innerHTML = pageItems.map((c) => `
+            el.tableBody.innerHTML = showEmpty
+                ? ""
+                : pageItems.map((c) => `
                 <tr class="crm-row" data-id="${escapeHtml(c.customerId)}">
                     <td class="crm-td--name">${escapeHtml(c.fullName)}</td>
                     <td class="crm-td--phone">${escapeHtml(c.phone || "—")}</td>
@@ -281,7 +308,9 @@ export function initCustomerCrm(barberSlug) {
         }
 
         if (el.cards) {
-            el.cards.innerHTML = pageItems.map((c) => {
+            el.cards.innerHTML = showEmpty
+                ? ""
+                : pageItems.map((c) => {
                 const wa = whatsappHref(c.phone);
                 return `<div class="crm-card" data-id="${escapeHtml(c.customerId)}">
                     <div class="crm-card__top">
