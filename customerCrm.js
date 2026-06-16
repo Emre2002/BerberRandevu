@@ -78,6 +78,14 @@ export function initCustomerCrm(barberSlug) {
         return date.toLocaleDateString("tr-TR", { day: "2-digit", month: "2-digit", year: "numeric" });
     }
 
+    function whatsappHref(phone) {
+        let digits = normalizePhone(phone || "");
+        if (!digits) return null;
+        if (digits.startsWith("0")) digits = "90" + digits.slice(1);
+        else if (!digits.startsWith("90")) digits = "90" + digits;
+        return `https://wa.me/${digits}`;
+    }
+
     function statusBadge(status, isVip) {
         const s = CUSTOMER_STATUS[status] || CUSTOMER_STATUS.lost;
         const vip = isVip ? `<span class="crm-badge crm-badge--vip">⭐ VIP</span>` : "";
@@ -273,18 +281,27 @@ export function initCustomerCrm(barberSlug) {
         }
 
         if (el.cards) {
-            el.cards.innerHTML = pageItems.map((c) => `
-                <div class="crm-card" data-id="${escapeHtml(c.customerId)}">
+            el.cards.innerHTML = pageItems.map((c) => {
+                const wa = whatsappHref(c.phone);
+                return `<div class="crm-card" data-id="${escapeHtml(c.customerId)}">
                     <div class="crm-card__top">
                         <div class="crm-card__name">${escapeHtml(c.fullName)}</div>
                         <div class="crm-card__badges">${statusBadge(c.status, c.isVip)}</div>
                     </div>
                     <div class="crm-card__phone">📞 ${escapeHtml(c.phone || "—")}</div>
-                    <div class="crm-card__meta">
-                        <span>🔁 ${c.totalVisits} ziyaret</span>
-                        <span>🕞 Son: ${fmtDate(c.lastVisit)}</span>
+                    <div class="crm-card__grid-mobile">
+                        <div><span>Ziyaret</span><strong>${c.totalVisits}</strong></div>
+                        <div><span>İlk</span><strong>${fmtDate(c.firstVisit)}</strong></div>
+                        <div><span>Son</span><strong>${fmtDate(c.lastVisit)}</strong></div>
                     </div>
-                </div>`).join("");
+                    <div class="crm-card__actions">
+                        <button type="button" class="crm-card__btn" data-action="detail" data-id="${escapeHtml(c.customerId)}">Detay</button>
+                        ${wa
+                            ? `<a href="${wa}" target="_blank" rel="noopener noreferrer" class="crm-card__btn crm-card__btn--wa">WhatsApp</a>`
+                            : `<span class="crm-card__btn crm-card__btn--disabled">WhatsApp</span>`}
+                    </div>
+                </div>`;
+            }).join("");
         }
 
         renderPagination(list.length, totalPages);
@@ -418,8 +435,14 @@ export function initCustomerCrm(barberSlug) {
     });
 
     function onRowClick(e) {
-        const row = e.target.closest("[data-id]");
-        if (!row) return;
+        const detailBtn = e.target.closest("[data-action='detail']");
+        if (detailBtn) {
+            openDetail(detailBtn.dataset.id);
+            return;
+        }
+        const row = e.target.closest(".crm-row[data-id], .crm-card[data-id]");
+        if (!row || e.target.closest(".crm-card__actions a")) return;
+        if (row.classList.contains("crm-card") && !e.target.closest(".crm-card__btn")) return;
         openDetail(row.dataset.id);
     }
     el.tableBody?.addEventListener("click", onRowClick);

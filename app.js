@@ -7,9 +7,13 @@ import {
 import { initCustomerCrm } from "./customerCrm.js";
 import { initSubscriptionAdmin } from "./subscriptionAdmin.js";
 import { initWorkingHoursAdmin } from "./workingHoursAdmin.js";
+import { initDeletedAppointmentsPanel } from "./deletedAppointmentsPanel.js";
+import { archiveAndDeleteAppointment } from "./deletedAppointmentsService.js";
+import { isSuperAdminLoggedIn } from "./sessionAuth.js";
 import {
     isAdminCalendarAllowed,
-    getAdminCalendarLockMessage
+    getAdminCalendarLockMessage,
+    SHOPIER_URL
 } from "./subscriptionService.js";
 import {
     generateHourlySlots,
@@ -310,33 +314,6 @@ function showToast(message, type = "success") {
     toast.textContent = message;
     toast.className = `toast ${type} show`;
     setTimeout(() => toast.classList.remove("show"), 4000);
-}
-function showUndoToast(message, onUndo, onConfirm) {
-    const toast = document.getElementById("toast");
-    if (!toast) return;
-
-    toast.innerHTML = `
-        <span>${message}</span>
-        <button id="toastUndoBtn" style="margin-left:12px;background:none;border:1px solid currentColor;border-radius:4px;color:inherit;font-size:0.8rem;padding:3px 10px;cursor:pointer;font-family:inherit;">Geri Al</button>
-    `;
-    toast.className = "toast error show";
-
-    let undone = false;
-    let timer;
-
-    document.getElementById("toastUndoBtn").addEventListener("click", () => {
-        undone = true;
-        clearTimeout(timer);
-        toast.classList.remove("show");
-        onUndo();
-    });
-
-    timer = setTimeout(async () => {
-        if (!undone) {
-            toast.classList.remove("show");
-            await onConfirm();
-        }
-    }, 5000);
 }
 
 function showError(container, message) {
@@ -799,6 +776,10 @@ function initAdminPage() {
     document.querySelector('.admin-tab[data-tab="customers"]')
         ?.addEventListener("click", () => crm.activate());
 
+    const deletedPanel = initDeletedAppointmentsPanel(aktifDukkan);
+    document.querySelector('.admin-tab[data-tab="deleted"]')
+        ?.addEventListener("click", () => deletedPanel.activate());
+
     const subscription = initSubscriptionAdmin(aktifDukkan, showToast, {
         initialBarber: cachedBarberData,
         onActivated: (barber) => {
@@ -848,7 +829,11 @@ function initAdminPage() {
 
         if (lockBanner) {
             lockBanner.hidden = allowed;
-            if (!allowed) lockBanner.textContent = getAdminCalendarLockMessage();
+            if (!allowed) {
+                lockBanner.innerHTML = `
+                    <p class="sub-lock-banner__text">${getAdminCalendarLockMessage()}</p>
+                    <a href="${SHOPIER_URL}" target="_blank" rel="noopener noreferrer" class="sub-shopier-btn sub-shopier-btn--banner">Shopier'den Kod Satın Al</a>`;
+            }
         }
 
         if (customersTab) customersTab.hidden = !allowed;
@@ -861,7 +846,10 @@ function initAdminPage() {
             calendarGrid.innerHTML = `<div class="sub-lock-screen">
                 <div class="sub-lock-screen__icon">🔒</div>
                 <p>${getAdminCalendarLockMessage()}</p>
-                <button type="button" class="btn btn-primary" id="goToSubscriptionTab">Kod Etkinleştir</button>
+                <div class="sub-lock-screen__actions">
+                    <a href="${SHOPIER_URL}" target="_blank" rel="noopener noreferrer" class="sub-shopier-btn">Shopier'den Kod Satın Al</a>
+                    <button type="button" class="btn btn-secondary" id="goToSubscriptionTab">Kod Etkinleştir</button>
+                </div>
             </div>`;
             document.getElementById("goToSubscriptionTab")?.addEventListener("click", () => {
                 subscription.openSubscriptionTab?.();
@@ -886,6 +874,59 @@ function initAdminPage() {
     const weekLabel = document.getElementById("weekLabel");
     const dayActions = document.getElementById("dayActions");
     const modalOverlay = document.getElementById("modalOverlay");
+    const deleteConfirmOverlay = document.getElementById("deleteConfirmOverlay");
+    let pendingDeleteAppt = null;
+    let pendingDeleteDate = null;
+
+    function getDeletedByUser() {
+        if (isSuperAdminLoggedIn()) return "superAdmin";
+        return cachedBarberData?.username || aktifDukkan || "barberAdmin";
+    }
+
+    function closeDeleteConfirmModal() {
+        pendingDeleteAppt = null;
+        pendingDeleteDate = null;
+        deleteConfirmOverlay?.classList.remove("show");
+    }
+
+    function openDeleteConfirmModal(appt, date) {
+        pendingDeleteAppt = appt;
+        pendingDeleteDate = date;
+        deleteConfirmOverlay?.classList.add("show");
+    }
+
+    deleteConfirmOverlay?.addEventListener("click", (e) => {
+        if (e.target === deleteConfirmOverlay) closeDeleteConfirmModal();
+    });
+
+    document.getElementById("deleteConfirmCancel")?.addEventListener("click", closeDeleteConfirmModal);
+
+    document.getElementById("deleteConfirmYes")?.addEventListener("click", async () => {
+        const appt = pendingDeleteAppt;
+        const date = pendingDeleteDate;
+        if (!appt) return;
+
+        const confirmBtn = document.getElementById("deleteConfirmYes");
+        if (confirmBtn) confirmBtn.disabled = true;
+
+        try {
+            await archiveAndDeleteAppointment({
+                barberSlug: aktifDukkan,
+                appointment: appt,
+                deletedBy: getDeletedByUser(),
+                deletedByMode: "adminPanel"
+            });
+            closeDeleteConfirmModal();
+            closeModal();
+            showToast("Randevu silindi ve 7 gün boyunca arşive taşındı.");
+            await refreshDay(date || appt.date);
+            await deletedPanel.refresh();
+        } catch (err) {
+            showToast(err.message || firestoreErrorMessage(err), "error");
+        } finally {
+            if (confirmBtn) confirmBtn.disabled = false;
+        }
+    });
 
     document.getElementById("btnPrevWeek")?.addEventListener("click", () => {
         currentMonday.setDate(currentMonday.getDate() - 7);
@@ -909,6 +950,8 @@ function initAdminPage() {
         document.getElementById("modalTitle").textContent = title;
         document.getElementById("modalBody").innerHTML = bodyHtml;
         document.getElementById("modalActions").innerHTML = actionsHtml;
+        const closeBtn = document.getElementById("modalCloseBtn");
+        if (closeBtn) closeBtn.onclick = closeModal;
         modalOverlay.classList.add("show");
     }
 
@@ -939,28 +982,14 @@ function initAdminPage() {
         );
     }
 
-    async function deleteAppointment(appointment) {
-        if (appointment.legacy) {
-            const snap = await getDoc(doc(db, "berberler", aktifDukkan, "appointments", appointment.date));
-            if (snap.exists()) {
-                const data = { ...snap.data() };
-                Object.keys(data).forEach(key => {
-                    if (normalizeTimeKey(key) === appointment.time) delete data[key];
-                });
-                await setDoc(doc(db, "berberler", aktifDukkan, "appointments", appointment.date), data);
-            }
-        } else {
-            // Kanka randevuyu ana appointments koleksiyonundan silecek şekilde güncelledik
-            await deleteDoc(doc(db, "appointments", appointment.id));
-        }
-    }
-
     function getCellState(date, time) {
+        if (!weekData?.appointments?.[date]) return "available";
         if (weekData.dayClosed[date]) return "closed";
-        if (weekData.blocked[date].has(time)) return "closed";
+        if (weekData.blocked[date]?.has(time)) return "closed";
         if (weekData.appointments[date][time]) return "booked";
         return "available";
     }
+
     async function handleCellClick(date, time) {
         try {
             const state = getCellState(date, time);
@@ -1076,30 +1105,8 @@ function initAdminPage() {
             `);
 
             document.getElementById("modalClose").addEventListener("click", closeModal);
-            document.getElementById("modalDelete").addEventListener("click", async () => {
-                closeModal();
-                showUndoToast(`Randevu silindi.`, async () => {
-                    try {
-                        // Kanka geri alma butonuna basınca da yine ana koleksiyona yazıyoruz
-                        await createAppointmentWithEffects({
-                            barberId: aktifDukkan,
-                            customerName: appt.customerName,
-                            phone: appt.phone === "—" ? "" : appt.phone,
-                            service: appt.service === "—" ? "" : appt.service,
-                            date: appt.date,
-                            time: appt.time,
-                            status: appt.status || "confirmed",
-                            musteriNotu: appt.musteriNotu || ""
-                        });
-                        showToast("Randevu geri alındı.");
-                        await refreshDay(appt.date);
-                    } catch (err) {
-                        showToast("Geri alma başarısız: " + firestoreErrorMessage(err), "error");
-                    }
-                }, async () => {
-                    await deleteAppointment(appt);
-                    await refreshDay(appt.date);
-                });
+            document.getElementById("modalDelete").addEventListener("click", () => {
+                openDeleteConfirmModal(appt, date);
             });
         } catch (err) {
             console.error(err);
@@ -1169,7 +1176,7 @@ function initAdminPage() {
 
             weekDates.forEach(date => {
                 const cell = document.createElement("div");
-                const state = getCellState(date, time);
+                const state = getCellState(date, time) || "available";
                 cell.className = `calendar-cell calendar-cell--${state}`;
 
                 if (outsideHours) {

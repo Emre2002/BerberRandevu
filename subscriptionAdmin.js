@@ -5,7 +5,8 @@ import {
     getAdminCalendarLockMessage,
     isSubscriptionWarningDue,
     isSubscriptionWarningDismissed,
-    dismissSubscriptionWarning
+    dismissSubscriptionWarning,
+    SHOPIER_URL
 } from "./subscriptionService.js";
 
 let warningModalOpen = false;
@@ -189,6 +190,10 @@ export function initSubscriptionAdmin(barberSlug, showToast, opts = {}) {
     } else {
         refresh();
     }
+
+    document.querySelectorAll(".sub-shopier-btn").forEach((link) => {
+        link.href = SHOPIER_URL;
+    });
 
     bindWarningModal(barberSlug, barberData);
     maybeShowSubscriptionWarning(barberSlug, barberData);

@@ -38,6 +38,8 @@
 
 html {
     scroll-behavior: smooth;
+    max-width: 100%;
+    overflow-x: hidden;
 }
 
 body {
@@ -46,6 +48,8 @@ body {
     color: var(--text-primary);
     line-height: 1.6;
     min-height: 100vh;
+    max-width: 100%;
+    overflow-x: hidden;
     -webkit-font-smoothing: antialiased;
 }
 
@@ -66,10 +70,11 @@ body::before {
     max-width: 640px;
     margin: 0 auto;
     padding: 24px 16px 48px;
+    overflow-x: hidden;
 }
 
 .app--admin {
-    max-width: 1400px;
+    max-width: min(1200px, 100%);
 }
 
 /* Header */
@@ -765,6 +770,83 @@ select option {
     box-shadow: var(--shadow-lg);
     transform: scale(0.95);
     transition: transform 0.25s ease;
+    position: relative;
+}
+
+.modal__header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.modal__header .modal-title {
+    margin-bottom: 0;
+    flex: 1;
+    padding-right: 8px;
+}
+
+.modal__close {
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    border: none;
+    border-radius: 50%;
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    font-size: 1.35rem;
+    line-height: 1;
+    cursor: pointer;
+    transition: color 0.2s ease, background 0.2s ease, transform 0.15s ease;
+}
+
+.modal__close:hover {
+    color: var(--text-primary);
+    background: var(--bg-elevated, rgba(255, 255, 255, 0.08));
+    transform: scale(1.05);
+}
+
+.modal-overlay--confirm {
+    z-index: 110;
+}
+
+.modal--confirm {
+    max-width: 440px;
+    border-color: rgba(239, 68, 68, 0.35);
+    box-shadow: 0 12px 40px rgba(239, 68, 68, 0.12), var(--shadow-lg);
+}
+
+.modal-title--danger {
+    color: #f87171;
+}
+
+.modal-confirm__text {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    line-height: 1.6;
+    margin: 0 0 4px;
+}
+
+.modal-actions--confirm {
+    margin-top: 24px;
+}
+
+.modal-actions--confirm .btn-secondary {
+    background: var(--bg-secondary);
+    border-color: var(--border);
+    color: var(--text-secondary);
+}
+
+.modal-actions--confirm .btn-danger {
+    background: #dc2626;
+    border-color: #dc2626;
+    color: #fff;
+}
+
+.modal-actions--confirm .btn-danger:hover {
+    background: #b91c1c;
+    border-color: #b91c1c;
 }
 
 .modal-overlay.show .modal {
@@ -774,7 +856,6 @@ select option {
 .modal-title {
     font-size: 1.125rem;
     font-weight: 600;
-    margin-bottom: 16px;
 }
 
 .modal-detail {

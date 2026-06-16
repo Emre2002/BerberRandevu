@@ -9,12 +9,14 @@
     <link rel="stylesheet" href="crm.css">
     <link rel="stylesheet" href="subscription.css">
     <link rel="stylesheet" href="working-hours.css">
+    <link rel="stylesheet" href="deleted-appointments.css">
     <style>
-        .admin-topbar { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; margin-bottom:16px; position:relative; }
+        html, body { max-width: 100%; overflow-x: hidden; }
+        .admin-topbar { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; margin-bottom:16px; position:relative; max-width:100%; }
         .admin-topbar__actions { display:flex; gap:8px; align-items:flex-start; }
         .admin-logout { padding:8px 14px; background:transparent; border:1px solid var(--border); border-radius:var(--radius-sm); color:var(--text-muted); font-size:0.8125rem; cursor:pointer; font-family:inherit; }
-        .admin-tabs { display:flex; gap:8px; margin-bottom:20px; flex-wrap:wrap; }
-        .admin-tab { padding:10px 16px; border:1px solid var(--border); background:var(--bg-card); color:var(--text-secondary); border-radius:var(--radius-sm); cursor:pointer; font-family:inherit; font-size:0.875rem; }
+        .admin-tabs { display:flex; gap:8px; margin-bottom:20px; flex-wrap:wrap; max-width:100%; }
+        .admin-tab { padding:10px 16px; min-height:44px; border:1px solid var(--border); background:var(--bg-card); color:var(--text-secondary); border-radius:var(--radius-sm); cursor:pointer; font-family:inherit; font-size:0.875rem; }
         .admin-tab.active { border-color:var(--accent); color:var(--text-primary); background:rgba(59,130,246,0.1); }
         .msg-panel { display:grid; gap:20px; }
         .msg-preview { background:var(--bg-secondary); border:1px solid var(--border); border-radius:var(--radius-sm); padding:16px; min-height:100px; white-space:pre-wrap; font-size:0.9375rem; }
@@ -105,6 +107,7 @@
             <button type="button" class="admin-tab" data-tab="customers">👥 Müşteriler</button>
             <button type="button" class="admin-tab" data-tab="messages">💬 Müşterilere Mesaj Gönder</button>
             <button type="button" class="admin-tab" data-tab="hours">🕐 Çalışma Saatleri</button>
+            <button type="button" class="admin-tab" data-tab="deleted">🗑️ Silinen Randevular</button>
             <button type="button" class="admin-tab" data-tab="subscription">🔑 Abonelik</button>
         </div>
 
@@ -216,6 +219,38 @@
             </section>
         </div>
 
+        <div class="admin-tab-panel" data-panel="deleted" hidden>
+            <section class="da-panel">
+                <div class="da-panel__header">
+                    <div>
+                        <h2 class="da-panel__title">Silinen Randevular Arşivi</h2>
+                        <p class="da-panel__hint">Silinen randevular 7 gün boyunca burada görünür, ardından listeden kalkar.</p>
+                    </div>
+                    <span class="da-panel__count"><span id="daCount">0</span> kayıt</span>
+                </div>
+                <div class="da-loading" id="daLoading" hidden>Yükleniyor...</div>
+                <div class="da-empty" id="daEmpty" hidden></div>
+                <div class="da-table-wrap">
+                    <table class="da-table">
+                        <thead>
+                            <tr>
+                                <th>Müşteri Adı</th>
+                                <th>Telefon</th>
+                                <th>Randevu Tarihi</th>
+                                <th>Randevu Saati</th>
+                                <th>Hizmet</th>
+                                <th>Silinme Tarihi</th>
+                                <th>Silen Kullanıcı</th>
+                                <th>Not</th>
+                            </tr>
+                        </thead>
+                        <tbody id="daTableBody"></tbody>
+                    </table>
+                </div>
+                <div class="da-cards" id="daCards"></div>
+            </section>
+        </div>
+
         <div class="admin-tab-panel" data-panel="subscription" hidden>
             <section class="sub-panel">
                 <div class="sub-card">
@@ -236,6 +271,17 @@
                             <strong id="subRemaining">—</strong>
                         </div>
                     </div>
+                    <div class="sub-shop-card">
+                        <div class="sub-shop-card__icon" aria-hidden="true">🛒</div>
+                        <div class="sub-shop-card__body">
+                            <h3 class="sub-shop-card__title">Aktivasyon Kodu Satın Al</h3>
+                            <p class="sub-shop-card__desc">
+                                Üyeliğinizi uzatmak için Shopier mağazamızdan Aylık, 3 Aylık veya Yıllık aktivasyon kodu satın alabilirsiniz.
+                                Satın alma sonrası size iletilen kodu aşağıdaki "Kod Etkinleştir" alanına girerek aboneliğinizi otomatik uzatabilirsiniz.
+                            </p>
+                            <a href="https://www.shopier.com/BerberRandevu" target="_blank" rel="noopener noreferrer" class="sub-shopier-btn" id="subShopierLink">Shopier'den Kod Satın Al</a>
+                        </div>
+                    </div>
                     <div class="sub-activate">
                         <label for="activationCodeInput">Aktivasyon Kodu</label>
                         <div class="sub-activate__row">
@@ -253,9 +299,27 @@
 
     <div class="modal-overlay" id="modalOverlay">
         <div class="modal">
-            <h3 class="modal-title" id="modalTitle">Randevu Detayı</h3>
+            <div class="modal__header">
+                <h3 class="modal-title" id="modalTitle">Randevu Detayı</h3>
+                <button type="button" class="modal__close" id="modalCloseBtn" aria-label="Kapat">×</button>
+            </div>
             <div id="modalBody"></div>
             <div class="modal-actions" id="modalActions"></div>
+        </div>
+    </div>
+
+    <div class="modal-overlay modal-overlay--confirm" id="deleteConfirmOverlay">
+        <div class="modal modal--confirm">
+            <div class="modal__header">
+                <h3 class="modal-title modal-title--danger">Randevuyu silmek istediğinize emin misiniz?</h3>
+            </div>
+            <p class="modal-confirm__text">
+                Bu işlem randevuyu takvimden kaldırır. Silinen randevu 7 gün boyunca arşivde tutulacaktır.
+            </p>
+            <div class="modal-actions modal-actions--confirm">
+                <button type="button" class="btn btn-secondary" id="deleteConfirmCancel">Hayır, Vazgeç</button>
+                <button type="button" class="btn btn-danger" id="deleteConfirmYes">Evet, Sil</button>
+            </div>
         </div>
     </div>
 
@@ -272,6 +336,7 @@
                 <strong>Abonelik</strong> sekmesinden etkinleştirebilirsiniz.
             </p>
             <div class="sub-warn-modal__actions">
+                <a href="https://www.shopier.com/BerberRandevu" target="_blank" rel="noopener noreferrer" class="sub-shopier-btn sub-shopier-btn--modal" id="subWarningShopier">Shopier'den Kod Satın Al</a>
                 <button type="button" class="btn btn-primary" id="subWarningActivate">Kod Etkinleştir</button>
                 <button type="button" class="btn btn-secondary" id="subWarningLater">Daha Sonra Hatırlat</button>
                 <button type="button" class="sub-warn-modal__ghost" id="subWarningNever">Bir Daha Gösterme</button>

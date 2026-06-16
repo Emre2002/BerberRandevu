@@ -239,8 +239,10 @@ export function getCustomerBlockMessage() {
     return "Bu işletmenin online randevu sistemi geçici olarak kapalıdır.";
 }
 
+export const SHOPIER_URL = "https://www.shopier.com/BerberRandevu";
+
 export function getAdminCalendarLockMessage() {
-    return "Abonelik süreniz dolduğu için randevu takvimi kapatıldı. Sistemi kullanmaya devam etmek için kod etkinleştirin.";
+    return "Abonelik süreniz dolduğu için randevu takvimi kapatıldı. Sistemi kullanmaya devam etmek için Shopier'den aktivasyon kodu satın alıp Abonelik sekmesinden etkinleştirin.";
 }
 
 /**

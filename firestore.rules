@@ -38,6 +38,10 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    match /deletedAppointments/{docId} {
+      allow read, write: if true;
+    }
+
     match /demo_talepleri/{docId} {
       allow read, write: if true;
     }

@@ -7,6 +7,8 @@
     display: flex;
     flex-direction: column;
     gap: 18px;
+    max-width: 100%;
+    overflow-x: hidden;
 }
 
 /* --- İstatistik kartları --- */
@@ -90,6 +92,7 @@
     align-items: center;
     gap: 7px;
     padding: 9px 12px;
+    min-height: 40px;
     background: var(--bg-card);
     border: 1px solid var(--border);
     border-radius: 999px;
@@ -118,12 +121,14 @@
     border: 1px solid var(--border);
     border-radius: var(--radius);
     overflow: hidden;
+    max-width: 100%;
 }
-.crm-table { width: 100%; border-collapse: collapse; }
+
+.crm-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
 .crm-table thead th {
     text-align: left;
-    padding: 13px 16px;
-    font-size: 0.75rem;
+    padding: 10px 12px;
+    font-size: 0.72rem;
     font-weight: 600;
     color: var(--text-muted);
     text-transform: uppercase;
@@ -140,11 +145,14 @@
 .crm-th.active .crm-th__arrow { color: var(--accent); opacity: 1; }
 
 .crm-table tbody td {
-    padding: 14px 16px;
-    font-size: 0.875rem;
+    padding: 10px 12px;
+    font-size: 0.8125rem;
     color: var(--text-secondary);
     border-bottom: 1px solid var(--border);
     vertical-align: middle;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 .crm-table tbody tr:last-child td { border-bottom: none; }
 .crm-row { cursor: pointer; transition: background .12s ease; }
@@ -186,6 +194,56 @@
 .crm-card__badges { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; }
 .crm-card__phone { font-size: 0.85rem; color: var(--text-secondary); margin-top: 6px; }
 .crm-card__meta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; font-size: 0.78rem; color: var(--text-muted); }
+
+.crm-card__grid-mobile {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.crm-card__grid-mobile span {
+    display: block;
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.crm-card__grid-mobile strong {
+    font-size: 0.8rem;
+    color: var(--text-primary);
+    overflow-wrap: anywhere;
+}
+
+.crm-card__actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.crm-card__btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    padding: 10px 12px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+    transition: border-color .15s ease;
+}
+
+.crm-card__btn:hover { border-color: var(--border-hover); }
+.crm-card__btn--wa { background: rgba(34,197,94,.12); border-color: rgba(34,197,94,.35); color: #4ade80; }
+.crm-card__btn--disabled { opacity: .45; cursor: not-allowed; pointer-events: none; }
 
 /* --- Boş / yükleniyor durumları --- */
 .crm-empty { text-align: center; padding: 48px 20px; color: var(--text-muted); }
@@ -313,15 +371,16 @@
     .crm-stat__value { font-size: 1.25rem; }
 
     /* Tabloyu gizle, kart görünümüne geç */
-    .crm-table { display: none; }
-    .crm-cards { display: flex; }
+    .crm-table-wrap { display: none; }
+    .crm-cards { display: flex; width: 100%; padding: 0; }
 
-    .crm-toolbar { flex-direction: column; align-items: stretch; padding: 10px; }
-    .crm-filters { overflow-x: auto; flex-wrap: nowrap; padding-bottom: 4px; -webkit-overflow-scrolling: touch; }
-    .crm-filter { flex-shrink: 0; }
+    .crm-toolbar { flex-direction: column; align-items: stretch; padding: 10px 0; }
+    .crm-filters { flex-wrap: wrap; overflow-x: visible; padding-bottom: 0; }
+    .crm-filter { flex: 1 1 calc(50% - 4px); justify-content: center; min-height: 44px; }
 
     .crm-detail__grid { grid-template-columns: repeat(2, 1fr); }
     .crm-modal__body { padding: 18px; }
+    .crm-page-btn { min-height: 44px; }
 }
 
 @media (max-width: 380px) {

@@ -47,6 +47,11 @@
 .sub-topbar__link:hover { border-color: var(--accent); background: rgba(59,130,246,0.08); }
 
 .sub-lock-banner {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
     padding: 12px 16px;
     margin-bottom: 16px;
     border-radius: var(--radius-sm);
@@ -54,6 +59,13 @@
     border: 1px solid rgba(239, 68, 68, 0.5);
     color: #fca5a5;
     font-size: 0.875rem;
+    max-width: 100%;
+}
+
+.sub-lock-banner__text {
+    margin: 0;
+    flex: 1 1 220px;
+    line-height: 1.5;
 }
 
 .sub-lock-screen {
@@ -62,9 +74,97 @@
     color: var(--text-secondary);
 }
 .sub-lock-screen__icon { font-size: 2.5rem; margin-bottom: 12px; }
-.sub-lock-screen p { margin-bottom: 20px; max-width: 420px; margin-left: auto; margin-right: auto; }
+.sub-lock-screen p { margin-bottom: 20px; max-width: 420px; margin-left: auto; margin-right: auto; line-height: 1.55; }
 
-.sub-panel { display: flex; flex-direction: column; gap: 16px; }
+.sub-lock-screen__actions {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-width: 320px;
+    margin: 0 auto;
+}
+
+/* Shopier satın alma kartı */
+.sub-shop-card {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+    margin: 20px 0;
+    padding: 18px;
+    border-radius: var(--radius);
+    background: linear-gradient(145deg, rgba(212, 168, 83, 0.1), var(--bg-secondary));
+    border: 1px solid rgba(212, 168, 83, 0.35);
+    max-width: 100%;
+}
+
+.sub-shop-card__icon {
+    flex-shrink: 0;
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.4rem;
+    border-radius: 12px;
+    background: rgba(212, 168, 83, 0.16);
+    border: 1px solid rgba(212, 168, 83, 0.3);
+}
+
+.sub-shop-card__body {
+    flex: 1;
+    min-width: 0;
+}
+
+.sub-shop-card__title {
+    margin: 0 0 8px;
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.sub-shop-card__desc {
+    margin: 0 0 14px;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    line-height: 1.55;
+}
+
+.sub-shopier-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 44px;
+    padding: 12px 20px;
+    border-radius: var(--radius-sm);
+    background: linear-gradient(135deg, #d4a853, #b8862d);
+    border: 1px solid rgba(212, 168, 83, 0.6);
+    color: #1a1208;
+    font-family: inherit;
+    font-size: 0.9rem;
+    font-weight: 700;
+    text-decoration: none;
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+    box-shadow: 0 4px 14px rgba(212, 168, 83, 0.25);
+    white-space: nowrap;
+}
+
+.sub-shopier-btn:hover {
+    filter: brightness(1.06);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 18px rgba(212, 168, 83, 0.35);
+}
+
+.sub-shopier-btn--modal {
+    width: 100%;
+}
+
+.sub-shopier-btn--banner {
+    flex-shrink: 0;
+}
+
+.sub-panel { display: flex; flex-direction: column; gap: 16px; max-width: 100%; }
 .sub-card {
     background: var(--bg-card);
     border: 1px solid var(--border);
@@ -209,6 +309,10 @@
 .sub-warn-modal__actions .btn-primary {
     background: linear-gradient(135deg, #dc2626, #b91c1c);
     border-color: #ef4444;
+    min-height: 44px;
+}
+.sub-warn-modal__actions .btn-secondary {
+    min-height: 44px;
 }
 .sub-warn-modal__ghost {
     padding: 10px;
@@ -225,10 +329,16 @@
 @media (max-width: 640px) {
     .sub-info-grid { grid-template-columns: 1fr; }
     .sub-activate__row { flex-direction: column; }
-    .sub-activate__row .btn { width: 100%; }
+    .sub-activate__row .btn { width: 100%; min-height: 44px; }
     .sub-topbar { flex-direction: column; align-items: stretch; }
-    .sub-topbar__link { width: 100%; text-align: center; }
+    .sub-topbar__link { width: 100%; text-align: center; min-height: 44px; }
     .sub-warn-modal-overlay { align-items: flex-start; padding-top: 32px; }
+    .sub-shop-card { flex-direction: column; }
+    .sub-shopier-btn,
+    .sub-shopier-btn--banner,
+    .sub-shopier-btn--modal { width: 100%; }
+    .sub-lock-banner { flex-direction: column; align-items: stretch; }
+    .sub-lock-screen__actions { width: 100%; max-width: 100%; padding: 0 8px; }
 }
 
 /* Super Admin — aktivasyon kodları */

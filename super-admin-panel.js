@@ -242,48 +242,9 @@ function getPanelHtml() {
                 <button class="sa-tab" data-tab="pending">🏪 Bekleyen Dükkanlar <span class="sa-tab-badge" id="pendingBarbersBadge" hidden>0</span></button>
             </nav>
             <div class="sa-tab-panel" data-panel="barbers">
-                <section class="sa-card">
-                    <h2 class="sa-card__title">➕ Yeni Berber Ekle</h2>
-                    <form id="barberForm">
-                        <div class="sa-form-grid">
-                            <div class="sa-form-group"><label for="fieldName">Dükkan Adı</label><input type="text" id="fieldName" required></div>
-                            <div class="sa-form-group"><label for="fieldSlug">URL Slug</label><input type="text" id="fieldSlug" required placeholder="x-men-barber"></div>
-                            <div class="sa-form-group"><label for="fieldPhone">Telefon</label><input type="tel" id="fieldPhone" required></div>
-                            <div class="sa-form-group"><label for="fieldWhatsapp">WhatsApp</label><input type="tel" id="fieldWhatsapp" placeholder="905551234567"></div>
-                            <div class="sa-form-group"><label for="fieldOpenHour">Açılış Saati</label><input type="time" id="fieldOpenHour" value="09:00" required></div>
-                            <div class="sa-form-group"><label for="fieldCloseHour">Kapanış Saati</label><input type="time" id="fieldCloseHour" value="21:00" required></div>
-                            <div class="sa-form-group"><label for="fieldUsername">Kullanıcı Adı</label><input type="text" id="fieldUsername" required placeholder="elite_admin"></div>
-                            <div class="sa-form-group"><label for="fieldPassword">Şifre</label><input type="password" id="fieldPassword" required placeholder="••••••" minlength="4" autocomplete="new-password"></div>
-                            <div class="sa-form-group"><label for="fieldTelegram">Telegram Chat ID</label><input type="text" id="fieldTelegram" placeholder="123456789"></div>
-                            <div class="sa-form-group"><label for="fieldLogoUrl">Logo URL</label><input type="url" id="fieldLogoUrl" placeholder="https://..."></div>
-                            <div class="sa-form-group"><label for="fieldCoverUrl">Kapak URL</label><input type="url" id="fieldCoverUrl" placeholder="https://..."></div>
-                            <div class="sa-form-group"><label for="fieldMapsLink">Google Maps Linki</label><input type="url" id="fieldMapsLink" placeholder="https://maps.app.goo.gl/..."></div>
-                        </div>
-                        <div class="sa-address-card">
-                            <div class="sa-address-card__head"><span>📍</span> Adres Bilgisi</div>
-                            <div class="sa-address-grid">
-                                <div class="sa-form-group">
-                                    <label>İl</label>
-                                    <div class="sa-select" id="createCitySelect"></div>
-                                </div>
-                                <div class="sa-form-group">
-                                    <label>İlçe</label>
-                                    <div class="sa-select" id="createDistrictSelect"></div>
-                                </div>
-                                <div class="sa-form-group">
-                                    <label for="fieldNeighborhood">Mahalle</label>
-                                    <input type="text" id="fieldNeighborhood" placeholder="Örn: Gaziler Mahallesi">
-                                </div>
-                                <div class="sa-form-group sa-form-group--full">
-                                    <label for="fieldAddressDetail">Açık Adres</label>
-                                    <textarea id="fieldAddressDetail" rows="2" placeholder="Cadde, sokak, kapı no..."></textarea>
-                                </div>
-                            </div>
-                        </div>
-                        <p class="sa-form-error" id="formError"></p>
-                        <div class="sa-form-actions"><button type="submit" class="sa-btn sa-btn--primary">Kaydet</button></div>
-                    </form>
-                </section>
+                <div class="sad-toolbar-head">
+                    <button type="button" class="sa-btn sa-btn--primary" id="openCreateBarberBtn">➕ Yeni Berber Ekle</button>
+                </div>
                 <section class="sa-card">
                     <div class="sad-card-head">
                         <h2 class="sa-card__title" style="margin:0;">📋 Dükkan Yönetimi</h2>
@@ -355,12 +316,11 @@ function getPanelHtml() {
                         <table class="sa-table sad-table">
                             <thead><tr>
                                 <th class="sad-col-check"><input type="checkbox" id="sadSelectAll" aria-label="Tümünü seç"></th>
-                                <th>Dükkan</th><th>Şehir</th><th>İlçe</th><th>Telefon</th>
+                                <th>Dükkan</th><th>Konum</th><th>Telefon</th>
                                 <th>Abonelik</th><th>Bitiş</th><th>Kalan</th>
-                                <th>Müşteri</th><th>Randevu</th><th>Hızlı Erişim</th><th>Kayıt</th>
                                 <th>Durum</th><th>İşlemler</th>
                             </tr></thead>
-                            <tbody id="barbersTableBody"><tr><td colspan="14" class="sa-loading">Yükleniyor...</td></tr></tbody>
+                            <tbody id="barbersTableBody"><tr><td colspan="9" class="sa-loading">Yükleniyor...</td></tr></tbody>
                         </table>
                     </div>
                     <div class="sad-cards" id="sadCards"></div>
@@ -371,6 +331,56 @@ function getPanelHtml() {
             </div>
             <div class="sa-tab-panel" data-panel="pending" hidden>
                 ${getPendingBarbersPanelHtml()}
+            </div>
+        </div>
+        <div class="sa-modal-overlay" id="createBarberModal">
+            <div class="sa-modal sa-modal--wide sa-modal--scroll">
+                <div class="sa-modal__head">
+                    <h3 class="sa-modal__title">➕ Yeni Berber Ekle</h3>
+                    <button type="button" class="sa-modal__close" id="closeCreateBarberModal" aria-label="Kapat">×</button>
+                </div>
+                <form id="barberForm">
+                    <div class="sa-form-grid">
+                        <div class="sa-form-group"><label for="fieldName">Dükkan Adı</label><input type="text" id="fieldName" required></div>
+                        <div class="sa-form-group"><label for="fieldSlug">URL Slug</label><input type="text" id="fieldSlug" required placeholder="x-men-barber"></div>
+                        <div class="sa-form-group"><label for="fieldPhone">Telefon</label><input type="tel" id="fieldPhone" required></div>
+                        <div class="sa-form-group"><label for="fieldWhatsapp">WhatsApp</label><input type="tel" id="fieldWhatsapp" placeholder="905551234567"></div>
+                        <div class="sa-form-group"><label for="fieldOpenHour">Açılış Saati</label><input type="time" id="fieldOpenHour" value="09:00" required></div>
+                        <div class="sa-form-group"><label for="fieldCloseHour">Kapanış Saati</label><input type="time" id="fieldCloseHour" value="21:00" required></div>
+                        <div class="sa-form-group"><label for="fieldUsername">Kullanıcı Adı</label><input type="text" id="fieldUsername" required placeholder="elite_admin"></div>
+                        <div class="sa-form-group"><label for="fieldPassword">Şifre</label><input type="password" id="fieldPassword" required placeholder="••••••" minlength="4" autocomplete="new-password"></div>
+                        <div class="sa-form-group"><label for="fieldTelegram">Telegram Chat ID</label><input type="text" id="fieldTelegram" placeholder="123456789"></div>
+                        <div class="sa-form-group"><label for="fieldLogoUrl">Logo URL</label><input type="url" id="fieldLogoUrl" placeholder="https://..."></div>
+                        <div class="sa-form-group"><label for="fieldCoverUrl">Kapak URL</label><input type="url" id="fieldCoverUrl" placeholder="https://..."></div>
+                        <div class="sa-form-group"><label for="fieldMapsLink">Google Maps Linki</label><input type="url" id="fieldMapsLink" placeholder="https://maps.app.goo.gl/..."></div>
+                    </div>
+                    <div class="sa-address-card">
+                        <div class="sa-address-card__head"><span>📍</span> Adres Bilgisi</div>
+                        <div class="sa-address-grid">
+                            <div class="sa-form-group">
+                                <label>İl</label>
+                                <div class="sa-select" id="createCitySelect"></div>
+                            </div>
+                            <div class="sa-form-group">
+                                <label>İlçe</label>
+                                <div class="sa-select" id="createDistrictSelect"></div>
+                            </div>
+                            <div class="sa-form-group">
+                                <label for="fieldNeighborhood">Mahalle</label>
+                                <input type="text" id="fieldNeighborhood" placeholder="Örn: Gaziler Mahallesi">
+                            </div>
+                            <div class="sa-form-group sa-form-group--full">
+                                <label for="fieldAddressDetail">Açık Adres</label>
+                                <textarea id="fieldAddressDetail" rows="2" placeholder="Cadde, sokak, kapı no..."></textarea>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="sa-form-error" id="formError"></p>
+                    <div class="sa-modal__actions">
+                        <button type="button" class="sa-btn sa-btn--ghost" id="cancelCreateBarberModal">İptal</button>
+                        <button type="submit" class="sa-btn sa-btn--primary">Kaydet</button>
+                    </div>
+                </form>
             </div>
         </div>
         <div class="sa-modal-overlay" id="editModal">
@@ -696,19 +706,6 @@ function remainingCell(sub) {
     return `<span class="sad-days sad-days--${cls}">${sub.days} gün</span>`;
 }
 
-// Dükkanın slug'ından admin + randevu hızlı erişim linkleri üretir (ekstra read YOK).
-function quickLinksHtml(b) {
-    if (!b.slug) {
-        return `<span class="sad-quick__disabled" title="Slug bulunamadı">⚠️ Slug yok</span>`;
-    }
-    const adminUrl = escapeHtml((getAdminUrl(b.slug) || "#") + "&fromSuperAdmin=true");
-    const bookingUrl = escapeHtml(getBookingUrl(b.slug) || "#");
-    return `<div class="sad-quick">
-        <a href="${adminUrl}" target="_blank" rel="noopener noreferrer" class="sad-quick__btn sad-quick__btn--admin">⚙️ Admin</a>
-        <a href="${bookingUrl}" target="_blank" rel="noopener noreferrer" class="sad-quick__btn sad-quick__btn--booking">📅 Randevu</a>
-    </div>`;
-}
-
 function statusToggleBtn(b) {
     const status = b.status || "active";
     return status === "active"
@@ -716,32 +713,56 @@ function statusToggleBtn(b) {
         : `<button class="sa-btn sa-btn--status sa-btn--status-passive" data-action="toggle" data-slug="${b.slug}" data-status="${status}">🔴 Pasif</button>`;
 }
 
+function actionsMenuHtml(b) {
+    if (!b.slug) {
+        return `<span class="sad-quick__disabled" title="Slug bulunamadı">⚠️</span>`;
+    }
+    const baseAdmin = getAdminUrl(b.slug);
+    const adminUrl = escapeHtml(baseAdmin ? `${baseAdmin}&fromSuperAdmin=true` : "#");
+    const bookingUrl = escapeHtml(getBookingUrl(b.slug) || "#");
+    const status = b.status || "active";
+    const toggleLabel = status === "active" ? "🔴 Pasif Et" : "🟢 Aktif Et";
+    return `<div class="sad-actions">
+        <div class="sad-quick sad-quick--compact">
+            <a href="${adminUrl}" target="_blank" rel="noopener noreferrer" class="sad-quick__btn sad-quick__btn--admin" title="Admin">⚙️</a>
+            <a href="${bookingUrl}" target="_blank" rel="noopener noreferrer" class="sad-quick__btn sad-quick__btn--booking" title="Randevu">📅</a>
+        </div>
+        <div class="sad-menu">
+            <button type="button" class="sad-menu__trigger" aria-label="İşlemler">⋮</button>
+            <div class="sad-menu__panel" hidden>
+                <button type="button" class="sad-menu__item" data-action="edit" data-slug="${escapeHtml(b.slug)}">✏️ Düzenle</button>
+                <button type="button" class="sad-menu__item" data-action="copy" data-slug="${escapeHtml(b.slug)}">🔗 Link Kopyala</button>
+                <button type="button" class="sad-menu__item" data-action="toggle" data-slug="${escapeHtml(b.slug)}" data-status="${status}">${toggleLabel}</button>
+                <button type="button" class="sad-menu__item sad-menu__item--danger" data-action="delete" data-slug="${escapeHtml(b.slug)}">🗑️ Sil</button>
+            </div>
+        </div>
+    </div>`;
+}
+
 function rowHtml(b) {
     const checked = dashView.selected.has(b.slug) ? "checked" : "";
+    const loc = [b.city, b.district].filter(Boolean).join(" / ") || "—";
     return `<tr>
         <td class="sad-col-check"><input type="checkbox" class="sad-row-check" data-check-slug="${b.slug}" ${checked}></td>
-        <td><div class="sad-shop"><span class="sad-shop__name">${escapeHtml(getBarberName(b))}</span><span class="sad-shop__slug">${escapeHtml(b.slug)}</span></div></td>
-        <td>${escapeHtml(b.city || "—")}</td>
-        <td>${escapeHtml(b.district || "—")}</td>
-        <td>${escapeHtml(b.phone || "—")}</td>
-        <td>${subBadge(b._sub)}</td>
-        <td>${b.subscriptionEndDate ? formatDateTR(b.subscriptionEndDate) : "—"}</td>
-        <td>${remainingCell(b._sub)}</td>
-        <td class="sad-num">${b._customers}</td>
-        <td class="sad-num">${b._appointments}</td>
-        <td>${quickLinksHtml(b)}</td>
-        <td>${b.createdAt ? formatDate(b.createdAt) : "—"}</td>
-        <td>${statusToggleBtn(b)}</td>
-        <td><div class="sa-table__actions">
-            <button class="sa-btn sa-btn--ghost" data-action="edit" data-slug="${b.slug}">Düzenle</button>
-            <button class="sa-btn sa-btn--ghost" data-action="copy" data-slug="${b.slug}" ${!b.slug ? 'disabled title="Bu dükkan için slug bulunamadı."' : ""}>Kopyala</button>
-            <button class="sa-btn sa-btn--danger" data-action="delete" data-slug="${b.slug}">Sil</button>
-        </div></td>
+        <td class="sad-col-shop"><div class="sad-shop"><span class="sad-shop__name">${escapeHtml(getBarberName(b))}</span><span class="sad-shop__slug">${escapeHtml(b.slug)}</span></div></td>
+        <td class="sad-col-loc" title="${escapeHtml(loc)}">${escapeHtml(loc)}</td>
+        <td class="sad-col-phone">${escapeHtml(b.phone || "—")}</td>
+        <td class="sad-col-sub">${subBadge(b._sub)}</td>
+        <td class="sad-col-date">${b.subscriptionEndDate ? formatDateTR(b.subscriptionEndDate) : "—"}</td>
+        <td class="sad-col-days">${remainingCell(b._sub)}</td>
+        <td class="sad-col-status">${statusToggleBtn(b)}</td>
+        <td class="sad-col-actions">${actionsMenuHtml(b)}</td>
     </tr>`;
 }
 
 function cardHtml(b) {
     const checked = dashView.selected.has(b.slug) ? "checked" : "";
+    const loc = [b.city, b.district].filter(Boolean).join(" / ") || "—";
+    const baseAdmin = getAdminUrl(b.slug);
+    const adminUrl = escapeHtml(baseAdmin ? `${baseAdmin}&fromSuperAdmin=true` : "#");
+    const bookingUrl = escapeHtml(getBookingUrl(b.slug) || "#");
+    const status = b.status || "active";
+    const toggleLabel = status === "active" ? "🔴 Pasif Et" : "🟢 Aktif Et";
     return `<div class="sad-card">
         <div class="sad-card__head">
             <label class="sad-card__check"><input type="checkbox" class="sad-row-check" data-check-slug="${b.slug}" ${checked}></label>
@@ -752,19 +773,19 @@ function cardHtml(b) {
             ${subBadge(b._sub)}
         </div>
         <div class="sad-card__grid">
-            <div><span>Şehir / İlçe</span><strong>${escapeHtml(b.city || "—")}${b.district ? " / " + escapeHtml(b.district) : ""}</strong></div>
+            <div><span>Konum</span><strong>${escapeHtml(loc)}</strong></div>
             <div><span>Telefon</span><strong>${escapeHtml(b.phone || "—")}</strong></div>
             <div><span>Kalan</span><strong>${remainingCell(b._sub)}</strong></div>
             <div><span>Bitiş</span><strong>${b.subscriptionEndDate ? formatDateTR(b.subscriptionEndDate) : "—"}</strong></div>
-            <div><span>Müşteri</span><strong>${b._customers}</strong></div>
-            <div><span>Randevu</span><strong>${b._appointments}</strong></div>
         </div>
-        <div class="sad-card__quick">${quickLinksHtml(b)}</div>
-        <div class="sad-card__actions">
-            ${statusToggleBtn(b)}
-            <button class="sa-btn sa-btn--ghost" data-action="edit" data-slug="${b.slug}">Düzenle</button>
-            <button class="sa-btn sa-btn--ghost" data-action="copy" data-slug="${b.slug}" ${!b.slug ? 'disabled title="Bu dükkan için slug bulunamadı."' : ""}>Kopyala</button>
-            <button class="sa-btn sa-btn--danger" data-action="delete" data-slug="${b.slug}">Sil</button>
+        <div class="sad-card__status-row">${statusToggleBtn(b)}</div>
+        <div class="sad-card__btn-grid">
+            <a href="${adminUrl}" target="_blank" rel="noopener noreferrer" class="sad-card__btn sad-card__btn--admin">⚙️ Admin</a>
+            <a href="${bookingUrl}" target="_blank" rel="noopener noreferrer" class="sad-card__btn sad-card__btn--booking">📅 Randevu</a>
+            <button type="button" class="sad-card__btn" data-action="edit" data-slug="${b.slug}">✏️ Düzenle</button>
+            <button type="button" class="sad-card__btn" data-action="copy" data-slug="${b.slug}" ${!b.slug ? "disabled" : ""}>🔗 Kopyala</button>
+            <button type="button" class="sad-card__btn" data-action="toggle" data-slug="${b.slug}" data-status="${status}">${toggleLabel}</button>
+            <button type="button" class="sad-card__btn sad-card__btn--danger" data-action="delete" data-slug="${b.slug}">🗑️ Sil</button>
         </div>
     </div>`;
 }
@@ -788,7 +809,7 @@ function renderBarberTable() {
 
     if (!list.length) {
         const msg = barbersCache.length ? "Filtreye uygun dükkan bulunamadı." : "Henüz berber yok.";
-        tbody.innerHTML = `<tr><td colspan="14" class="sa-table__empty">${msg}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="9" class="sa-table__empty">${msg}</td></tr>`;
         if (cardsHost) cardsHost.innerHTML = `<div class="sa-table__empty">${msg}</div>`;
         renderBulkBar();
         return;
@@ -1052,6 +1073,28 @@ function addApprovedBarberToCache({ result, pending }) {
     refreshBarberStatsUI();
 }
 
+function closeAllActionMenus() {
+    document.querySelectorAll(".sad-menu.is-open").forEach((menu) => {
+        menu.classList.remove("is-open");
+        const panel = menu.querySelector(".sad-menu__panel");
+        if (panel) panel.hidden = true;
+    });
+}
+
+function openCreateBarberModal() {
+    const modal = document.getElementById("createBarberModal");
+    if (!modal) return;
+    modal.classList.add("open");
+    document.body.style.overflow = "hidden";
+}
+
+function closeCreateBarberModal() {
+    const modal = document.getElementById("createBarberModal");
+    if (!modal) return;
+    modal.classList.remove("open");
+    document.body.style.overflow = "";
+}
+
 function bindPanelEvents(onLogout) {
     document.getElementById("saLogoutBtn")?.addEventListener("click", onLogout);
 
@@ -1082,6 +1125,31 @@ function bindPanelEvents(onLogout) {
         if (!slugInput.value.trim()) slugInput.value = normalizeSlug(nameInput.value);
         if (!usernameInput.value.trim()) usernameInput.value = normalizeSlug(nameInput.value).replace(/-/g, "_");
     });
+
+    document.getElementById("openCreateBarberBtn")?.addEventListener("click", openCreateBarberModal);
+    document.getElementById("closeCreateBarberModal")?.addEventListener("click", closeCreateBarberModal);
+    document.getElementById("cancelCreateBarberModal")?.addEventListener("click", closeCreateBarberModal);
+    document.getElementById("createBarberModal")?.addEventListener("click", (e) => {
+        if (e.target.id === "createBarberModal") closeCreateBarberModal();
+    });
+
+    document.getElementById("saPanel")?.addEventListener("click", (e) => {
+        const trigger = e.target.closest(".sad-menu__trigger");
+        if (trigger) {
+            e.stopPropagation();
+            const menu = trigger.closest(".sad-menu");
+            const panel = menu?.querySelector(".sad-menu__panel");
+            const wasOpen = menu?.classList.contains("is-open");
+            closeAllActionMenus();
+            if (menu && panel && !wasOpen) {
+                menu.classList.add("is-open");
+                panel.hidden = false;
+            }
+            return;
+        }
+        if (e.target.closest(".sad-menu__item")) closeAllActionMenus();
+    });
+    document.addEventListener("click", closeAllActionMenus);
 
     document.getElementById("firebaseConfigForm")?.addEventListener("submit", (e) => {
         e.preventDefault();
@@ -1139,6 +1207,7 @@ function bindPanelEvents(onLogout) {
             });
             e.target.reset();
             createAddress?.reset();
+            closeCreateBarberModal();
             showToastFn("Berber başarıyla oluşturuldu.");
             // Tüm listeyi tekrar çekmek yerine yalnızca yeni kaydı oku ve cache'e ekle.
             const newBarber = await fetchBarber(created.slug);
