@@ -107,6 +107,7 @@
             <button type="button" class="admin-tab" data-tab="customers">👥 Müşteriler</button>
             <button type="button" class="admin-tab" data-tab="messages">💬 Müşterilere Mesaj Gönder</button>
             <button type="button" class="admin-tab" data-tab="hours">🕐 Çalışma Saatleri</button>
+            <button type="button" class="admin-tab" data-tab="services">✂️ Hizmetler</button>
             <button type="button" class="admin-tab" data-tab="deleted">🗑️ Silinen Randevular</button>
             <button type="button" class="admin-tab" data-tab="subscription">🔑 Abonelik</button>
         </div>
@@ -217,6 +218,32 @@
                         <div class="wh-preview__chips" id="whSlotPreview"></div>
                     </div>
                     <button type="button" class="btn btn-primary" id="whSaveBtn">Çalışma Saatlerini Güncelle</button>
+                </div>
+            </section>
+        </div>
+
+        <div class="admin-tab-panel" data-panel="services" hidden>
+            <section class="svc-panel">
+                <div class="svc-card-wrap">
+                    <h2 class="svc-card-wrap__title">Hizmetler</h2>
+                    <p class="svc-card-wrap__desc">
+                        Sunduğunuz hizmetleri seçin. Müşteriler randevu alırken yalnızca seçtiğiniz hizmetleri görür.
+                    </p>
+                    <div class="svc-toolbar">
+                        <div class="svc-search">
+                            <span class="svc-search__icon">🔍</span>
+                            <input type="search" id="svcSearch" placeholder="Hizmet adı ara..." autocomplete="off">
+                        </div>
+                        <div class="svc-toolbar__actions">
+                            <button type="button" class="btn btn-secondary btn-sm" id="svcSelectAll">Tümünü Seç</button>
+                            <button type="button" class="btn btn-secondary btn-sm" id="svcClearAll">Tümünü Temizle</button>
+                        </div>
+                    </div>
+                    <div class="svc-grid" id="svcGrid"></div>
+                    <div class="svc-meta">
+                        <p class="svc-count" id="svcCount">0 hizmet seçili</p>
+                    </div>
+                    <button type="button" class="btn btn-primary" id="svcSaveBtn">Hizmetleri Kaydet</button>
                 </div>
             </section>
         </div>

@@ -1,12 +1,19 @@
 import { db } from "./firebase-config.js";
 import { getBarberBlockReason } from "./firestoreService.js";
-import { createAppointmentWithEffects } from "./appointmentService.js";
+import { createAppointmentWithEffects, findActiveAppointmentByPhoneOnDay } from "./appointmentService.js";
+import { normalizePhone } from "./customerService.js";
 import {
     initBarberLiveNotifications, initBarberMessaging, initAdminTabs
 } from "./barberAdminExtras.js";
 import { initCustomerCrm } from "./customerCrm.js";
 import { initSubscriptionAdmin } from "./subscriptionAdmin.js";
 import { initWorkingHoursAdmin } from "./workingHoursAdmin.js";
+import {
+    initServicesAdmin,
+    renderCustomerServicePicker,
+    getEffectiveSelectedServices,
+    clearCustomerServiceSelection
+} from "./servicesAdmin.js";
 import { initDeletedAppointmentsPanel } from "./deletedAppointmentsPanel.js";
 import { archiveAndDeleteAppointment } from "./deletedAppointmentsService.js";
 import { isSuperAdminLoggedIn } from "./sessionAuth.js";
@@ -51,6 +58,30 @@ function escapeHtml(str) {
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#39;");
+}
+
+function buildAppointmentWhatsAppMessage(customerName, dateLabel, time) {
+    return `Merhaba ${customerName}, ${dateLabel} tarihinde saat ${time} için randevunuz hakkında iletişime geçiyoruz.`;
+}
+
+function buildWhatsAppAdminLink(phone, message) {
+    const local = normalizePhone(phone);
+    if (!local) return null;
+    return `https://wa.me/90${local}?text=${encodeURIComponent(message)}`;
+}
+
+function appointmentWhatsAppActionHtml(appt, date, time, formatDateFn) {
+    const message = buildAppointmentWhatsAppMessage(
+        appt.customerName || "Müşteri",
+        formatDateFn(date),
+        time
+    );
+    const waUrl = buildWhatsAppAdminLink(appt.phone, message);
+
+    if (waUrl) {
+        return `<a href="${escapeHtml(waUrl)}" target="_blank" rel="noopener noreferrer" class="btn btn-whatsapp" id="modalWhatsApp">🟢 Mesaj Gönder</a>`;
+    }
+    return `<button type="button" class="btn btn-whatsapp btn-whatsapp--disabled" id="modalWhatsApp" disabled title="Telefon numarası bulunamadı">🟢 Mesaj Gönder</button>`;
 }
 
 // Müşteri tarafı için yapısal adresi satırlara böler:
@@ -202,6 +233,10 @@ async function dukkanArayuzunuDinamikYap() {
             // 4. ÇALIŞMA SAATLERİ — slot üretimini besler
             activeWorkingHours = getBarberWorkingHours(veri, { warnMissing: true });
 
+            if (isCustomerPage) {
+                renderCustomerServicePicker(getEffectiveSelectedServices(veri));
+            }
+
             if (document.getElementById("barberHours")) {
                 const saatMetni = veri.openHour && veri.closeHour
                     ? `Her gün ${veri.openHour} – ${veri.closeHour}`
@@ -295,6 +330,13 @@ function formatDateLocal(date) {
 
 function getToday() {
     return formatDateLocal(new Date());
+}
+
+/** Müşteri randevu ekranında tarih gösterimi (YYYY-MM-DD → GG.AA.YYYY). */
+function formatBookingDateDisplay(dateStr) {
+    if (!dateStr) return "—";
+    const [y, m, d] = dateStr.split("-");
+    return `${d}.${m}.${y}`;
 }
 
 function blockedSlotId(date, time) {
@@ -590,7 +632,183 @@ function initCustomerPage() {
 
     setRandomMotivationQuote();
 
+    renderCustomerServicePicker(getEffectiveSelectedServices(cachedBarberData), {
+        onChange: updateBookButton
+    });
+
     let selectedSlot = null;
+    let phoneDuplicateBlocked = false;
+
+    const DUPLICATE_APPOINTMENT_MSG =
+        "Bu telefon numarası ile bugün için zaten bir randevu bulunmaktadır. Gün içerisinde yalnızca 1 randevu oluşturabilirsiniz.";
+
+    function ensureDuplicateAppointmentModal() {
+        if (document.getElementById("dupApptModal")) return;
+
+        const overlay = document.createElement("div");
+        overlay.id = "dupApptModal";
+        overlay.className = "modal-overlay modal-overlay--confirm";
+        overlay.innerHTML = `
+            <div class="modal modal--confirm" role="dialog" aria-labelledby="dupApptModalTitle" aria-modal="true">
+                <div class="modal__header">
+                    <h3 class="modal-title modal-title--danger" id="dupApptModalTitle">Randevu Oluşturulamadı</h3>
+                    <button type="button" class="modal__close" id="dupApptModalClose" aria-label="Kapat">×</button>
+                </div>
+                <p class="modal-confirm__text">${DUPLICATE_APPOINTMENT_MSG}</p>
+                <div class="modal-actions modal-actions--confirm">
+                    <button type="button" class="btn btn-primary" id="dupApptModalOk">Tamam</button>
+                </div>
+            </div>`;
+
+        const host = document.getElementById("bookingRoot") || document.body;
+        host.appendChild(overlay);
+
+        const closeModal = () => overlay.classList.remove("show");
+        overlay.querySelector("#dupApptModalClose")?.addEventListener("click", closeModal);
+        overlay.querySelector("#dupApptModalOk")?.addEventListener("click", closeModal);
+        overlay.addEventListener("click", (e) => {
+            if (e.target === overlay) closeModal();
+        });
+    }
+
+    function showDuplicateAppointmentModal() {
+        ensureDuplicateAppointmentModal();
+        document.getElementById("dupApptModal")?.classList.add("show");
+    }
+
+    function getShopDisplayName() {
+        const fromDom = document.getElementById("barberName")?.textContent?.trim();
+        if (fromDom) return fromDom;
+        const veri = cachedBarberData;
+        return veri?.name || veri?.isim || aktifDukkan;
+    }
+
+    function buildBookingShareMessage({ shopName, customerName, date, time, service, phone }) {
+        const lines = [
+            "Randevunuz başarıyla oluşturuldu.",
+            "",
+            `Tarih: ${formatBookingDateDisplay(date)}`,
+            `Saat: ${time}`,
+            `Dükkan: ${shopName}`,
+            `Müşteri: ${customerName}`
+        ];
+        if (service) lines.push(`Hizmet: ${service}`);
+        lines.push(`Telefon: ${phone}`, "", "Randevu saatinizde görüşmek üzere.");
+        return lines.join("\n");
+    }
+
+    function getWhatsAppShareUrl(text) {
+        return `https://wa.me/?text=${encodeURIComponent(text)}`;
+    }
+
+    let lastBookingSuccess = null;
+
+    function ensureBookingSuccessModal() {
+        if (document.getElementById("bookingSuccessModal")) return;
+
+        const overlay = document.createElement("div");
+        overlay.id = "bookingSuccessModal";
+        overlay.className = "modal-overlay modal-overlay--success";
+        overlay.innerHTML = `
+            <div class="modal modal--success" role="dialog" aria-labelledby="bookingSuccessTitle" aria-modal="true">
+                <div class="modal-success__icon" aria-hidden="true">✅</div>
+                <h3 class="modal-title modal-title--success" id="bookingSuccessTitle">Randevunuz Oluşturuldu</h3>
+                <p class="modal-success__lead">Randevunuz başarıyla oluşturuldu.</p>
+                <dl class="modal-success__details">
+                    <div class="modal-success__row">
+                        <dt>Dükkan</dt>
+                        <dd id="bookingSuccessShop">—</dd>
+                    </div>
+                    <div class="modal-success__row">
+                        <dt>Müşteri</dt>
+                        <dd id="bookingSuccessCustomer">—</dd>
+                    </div>
+                    <div class="modal-success__row">
+                        <dt>Tarih</dt>
+                        <dd id="bookingSuccessDate">—</dd>
+                    </div>
+                    <div class="modal-success__row">
+                        <dt>Saat</dt>
+                        <dd id="bookingSuccessTime">—</dd>
+                    </div>
+                    <div class="modal-success__row" id="bookingSuccessServiceRow" hidden>
+                        <dt>Hizmet</dt>
+                        <dd id="bookingSuccessService">—</dd>
+                    </div>
+                    <div class="modal-success__row">
+                        <dt>Telefon</dt>
+                        <dd id="bookingSuccessPhone">—</dd>
+                    </div>
+                </dl>
+                <p class="modal-success__footer">Randevu saatinizde görüşmek üzere.</p>
+                <div class="modal-actions modal-actions--success">
+                    <a href="#" target="_blank" rel="noopener noreferrer" class="btn btn-whatsapp" id="bookingSuccessWhatsapp">WhatsApp ile Paylaş</a>
+                    <button type="button" class="btn btn-primary" id="bookingSuccessOk">Tamam</button>
+                </div>
+            </div>`;
+
+        const host = document.getElementById("bookingRoot") || document.body;
+        host.appendChild(overlay);
+
+        const closeModal = () => overlay.classList.remove("show");
+        overlay.querySelector("#bookingSuccessOk")?.addEventListener("click", closeModal);
+        overlay.addEventListener("click", (e) => {
+            if (e.target === overlay) closeModal();
+        });
+        overlay.querySelector("#bookingSuccessWhatsapp")?.addEventListener("click", (e) => {
+            if (!lastBookingSuccess) return;
+            e.preventDefault();
+            const url = getWhatsAppShareUrl(buildBookingShareMessage(lastBookingSuccess));
+            window.open(url, "_blank", "noopener,noreferrer");
+        });
+    }
+
+    function showBookingSuccessModal(details) {
+        lastBookingSuccess = details;
+        ensureBookingSuccessModal();
+
+        const set = (id, value) => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = value || "—";
+        };
+
+        set("bookingSuccessShop", details.shopName);
+        set("bookingSuccessCustomer", details.customerName);
+        set("bookingSuccessDate", formatBookingDateDisplay(details.date));
+        set("bookingSuccessTime", details.time);
+        set("bookingSuccessPhone", details.phone);
+
+        const serviceRow = document.getElementById("bookingSuccessServiceRow");
+        const serviceEl = document.getElementById("bookingSuccessService");
+        if (details.service) {
+            if (serviceRow) serviceRow.hidden = false;
+            if (serviceEl) serviceEl.textContent = details.service;
+        } else if (serviceRow) {
+            serviceRow.hidden = true;
+        }
+
+        const waLink = document.getElementById("bookingSuccessWhatsapp");
+        if (waLink) {
+            waLink.href = getWhatsAppShareUrl(buildBookingShareMessage(details));
+        }
+
+        document.getElementById("bookingSuccessModal")?.classList.add("show");
+    }
+
+    async function checkPhoneDuplicateForSelectedDate({ force = false } = {}) {
+        const phone = document.getElementById("customerPhone")?.value.trim() || "";
+        const date = dateInput?.value;
+        if (!phone || !date || !isValidTurkishPhone(phone)) {
+            phoneDuplicateBlocked = false;
+            return false;
+        }
+
+        const { appointments } = await getDayData(date, { force });
+        const existing = findActiveAppointmentByPhoneOnDay({ appointments, phone });
+        phoneDuplicateBlocked = Boolean(existing);
+        if (existing) showDuplicateAppointmentModal();
+        return phoneDuplicateBlocked;
+    }
 
     const dateInput = document.getElementById("appointmentDate");
     const btnBook = document.getElementById("btnBook");
@@ -626,7 +844,7 @@ function initCustomerPage() {
         const phoneOk = phone === "" || isValidTurkishPhone(phone);
         showPhoneError(phone !== "" && !phoneOk);
         if (btnBook) {
-            btnBook.disabled = !(name && phone && phoneOk && service && selectedSlot);
+            btnBook.disabled = !(name && phone && phoneOk && service && selectedSlot && !phoneDuplicateBlocked);
         }
     }
 
@@ -688,15 +906,27 @@ function initCustomerPage() {
     if (dateInput) {
         dateInput.addEventListener("change", () => {
             selectedSlot = null;
+            phoneDuplicateBlocked = false;
             updateBookButton();
             loadAvailableSlots();
+            checkPhoneDuplicateForSelectedDate();
+        });
+    }
+
+    const customerPhoneEl = document.getElementById("customerPhone");
+    if (customerPhoneEl) {
+        customerPhoneEl.addEventListener("blur", () => {
+            checkPhoneDuplicateForSelectedDate().then(() => updateBookButton());
         });
     }
 
     ["customerName", "customerPhone", "serviceSelect"].forEach(id => {
         const el = document.getElementById(id);
         if (el) {
-            el.addEventListener("input", updateBookButton);
+            el.addEventListener("input", () => {
+                if (id === "customerPhone") phoneDuplicateBlocked = false;
+                updateBookButton();
+            });
             el.addEventListener("change", updateBookButton);
         }
     });
@@ -724,6 +954,14 @@ function initCustomerPage() {
                     return;
                 }
 
+                const duplicate = findActiveAppointmentByPhoneOnDay({ appointments, phone });
+                if (duplicate) {
+                    phoneDuplicateBlocked = true;
+                    showDuplicateAppointmentModal();
+                    updateBookButton();
+                    return;
+                }
+
                 // Kanka randevuyu ana koleksiyona kaydedip barberId ekliyoruz ki her şey senkronize olsun
                 const customerNoteEl = document.getElementById("customerNote");
                 const musteriNotu = customerNoteEl ? customerNoteEl.value.trim() : "";
@@ -739,10 +977,20 @@ function initCustomerPage() {
                     musteriNotu
                 });
 
-                showToast("Randevunuz başarıyla oluşturuldu!");
+                const successDetails = {
+                    shopName: getShopDisplayName(),
+                    customerName,
+                    phone,
+                    service,
+                    date,
+                    time: selectedSlot
+                };
+
+                showBookingSuccessModal(successDetails);
                 selectedSlot = null;
                 document.getElementById("customerName").value = "";
                 document.getElementById("customerPhone").value = "";
+                clearCustomerServiceSelection();
                 document.getElementById("serviceSelect").value = "";
                 if (customerNoteEl) customerNoteEl.value = "";
                 // Bu gün değişti: cache'i temizle ki reload taze okusun. "Bugün"
@@ -806,6 +1054,15 @@ function initAdminPage() {
             }
         }
     });
+
+    const servicesAdmin = initServicesAdmin(aktifDukkan, showToast, {
+        initialBarber: cachedBarberData,
+        onUpdated: (selectedServices) => {
+            if (cachedBarberData) cachedBarberData.selectedServices = selectedServices;
+        }
+    });
+    document.querySelector('.admin-tab[data-tab="services"]')
+        ?.addEventListener("click", () => servicesAdmin.refresh?.(cachedBarberData));
 
     document.getElementById("subTopGoTab")?.addEventListener("click", () => {
         subscription.openSubscriptionTab?.();
@@ -1100,6 +1357,7 @@ function initAdminPage() {
                     <div class="modal-detail-value">${appt.status || "confirmed"}</div>
                 </div>
             `, `
+                ${appointmentWhatsAppActionHtml(appt, date, time, formatDisplayDate)}
                 <button class="btn btn-secondary" id="modalClose">Kapat</button>
                 <button class="btn btn-danger" id="modalDelete">Randevuyu Sil</button>
             `);
