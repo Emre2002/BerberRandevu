@@ -3,110 +3,50 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Berber Girişi | Yönetim Paneli</title>
+    <meta http-equiv="refresh" content="0;url=giris.html">
+    <title>Yönlendiriliyor | BerberRandevu</title>
     <link rel="stylesheet" href="super-admin.css">
     <style>
-        .bl-page {
+        body {
             min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
             padding: 24px 16px;
-            position: relative;
-            z-index: 1;
+            margin: 0;
         }
-        .bl-card {
-            width: 100%;
+        .redirect-card {
             max-width: 420px;
+            width: 100%;
+            text-align: center;
+            padding: 40px 32px;
             background: linear-gradient(145deg, var(--sa-bg-elevated), var(--sa-bg-card));
             border: 1px solid var(--sa-border);
             border-radius: var(--sa-radius);
-            padding: 40px 32px;
             box-shadow: var(--sa-shadow);
         }
-        .bl-icon {
-            width: 72px;
-            height: 72px;
-            margin: 0 auto 20px;
-            border-radius: 50%;
-            background: rgba(212, 168, 83, 0.15);
-            border: 1px solid rgba(212, 168, 83, 0.3);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 2rem;
+        .redirect-card h1 {
+            margin: 0 0 12px;
+            font-size: 1.25rem;
         }
-        .bl-title {
-            text-align: center;
-            font-size: 1.5rem;
-            font-weight: 700;
-            margin-bottom: 4px;
-        }
-        .bl-shop {
-            text-align: center;
-            font-size: 0.875rem;
+        .redirect-card p {
+            margin: 0;
             color: var(--sa-text-muted);
-            margin-bottom: 4px;
+            line-height: 1.6;
+            font-size: 0.9rem;
         }
-        .bl-slug {
-            text-align: center;
-            font-family: monospace;
-            font-size: 0.75rem;
+        .redirect-card a {
             color: var(--sa-accent);
-            margin-bottom: 28px;
         }
-        .bl-error {
-            display: none;
-            background: rgba(239, 68, 68, 0.12);
-            border: 1px solid rgba(239, 68, 68, 0.35);
-            border-radius: var(--sa-radius-sm);
-            color: var(--sa-danger);
-            font-size: 0.875rem;
-            text-align: center;
-            padding: 12px;
-            margin-bottom: 16px;
-        }
-        .bl-back {
-            display: block;
-            text-align: center;
-            margin-top: 20px;
-            font-size: 0.8125rem;
-            color: var(--sa-text-muted);
-            text-decoration: none;
-        }
-        .bl-back:hover { color: var(--sa-text); }
     </style>
+    <script>
+        window.location.replace("giris.html");
+    </script>
 </head>
 <body>
-    <div class="bl-page">
-        <div class="bl-card">
-            <div class="bl-icon">✂️</div>
-            <h1 class="bl-title">Yönetim Paneli Giriş</h1>
-            <p class="bl-shop" id="shopName">Berber</p>
-            <p class="bl-slug" id="shopSlug">—</p>
-
-            <div class="bl-warn" id="missingSlugMsg" hidden>
-                Bu sayfaya erişmek için URL'de dükkan parametresi gerekir.<br>
-                Örnek: <code>barber-login.html?dukkan=dukkan-slug</code>
-            </div>
-
-            <div class="bl-error" id="loginError" role="alert" hidden></div>
-
-            <form id="loginForm" autocomplete="off">
-                <div class="sa-form-group" style="margin-bottom:16px;">
-                    <label for="username">Kullanıcı Adı</label>
-                    <input type="text" id="username" placeholder="Kullanıcı adınız" required autocomplete="username">
-                </div>
-                <div class="sa-form-group" style="margin-bottom:20px;">
-                    <label for="password">Şifre</label>
-                    <input type="password" id="password" placeholder="Şifreniz" required autocomplete="current-password">
-                </div>
-                <button type="submit" class="sa-btn sa-btn--primary" id="loginBtn" style="width:100%;">Giriş Yap</button>
-            </form>
-
-            <a href="#" class="bl-back" id="backLink">← Müşteri sayfasına dön</a>
-        </div>
+    <div class="redirect-card">
+        <h1>Berber girişi yenilendi</h1>
+        <p>Giriş sayfasına yönlendiriliyorsunuz. Otomatik yönlendirme olmazsa <a href="giris.html">buraya tıklayın</a>.</p>
     </div>
-    <script type="module" src="barber-login.js"></script>
 </body>
 </html>

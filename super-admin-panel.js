@@ -1,9 +1,10 @@
 import {
     fetchAllBarbers, fetchBarber, createBarber, updateBarber,
-    toggleBarberStatus, extendSubscription, removeBarber, normalizeSlug, formatDate
+    toggleBarberStatus, extendSubscription, removeBarber, normalizeSlug, formatDate,
+    syncAllPublicBarbersForMigration
 } from "./firestoreService.js";
 import {
-    getBookingUrl, getAdminUrl, getWhatsAppBookingMessage
+    getBookingUrl, getWhatsAppBookingMessage
 } from "./linkService.js";
 import { serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import {
@@ -13,6 +14,18 @@ import {
 } from "./pendingBarbersPanel.js";
 import { fetchAllCustomers, toDateSafe } from "./customerService.js";
 import { saveFirebaseConfig, hasFirebaseConfig } from "./firebase-config.js";
+import { isSuperAdminLoggedIn } from "./sessionAuth.js";
+
+/** Super Admin → dükkan paneli: aynı origin (localStorage oturumu paylaşılır). */
+function buildSuperAdminAdminPanelUrl(slug) {
+    const normalized = String(slug || "").trim();
+    if (!normalized) return null;
+    const params = new URLSearchParams({
+        dukkan: normalized,
+        fromSuperAdmin: "true"
+    });
+    return `admin.html?${params.toString()}`;
+}
 import { getIller, getIlceler } from "./turkiyeAdres.js";
 import {
     calculateRemainingDays,
@@ -229,6 +242,9 @@ function getPanelHtml() {
             <header class="sa-header">
                 <h1 class="sa-header__title">Süper Admin <span class="sa-header__badge">SaaS</span></h1>
                 <div class="sa-header__actions">
+                    <button type="button" class="sa-btn sa-btn--ghost" id="saSyncPublicBarbersBtn" title="berberler → publicBarbers mirror">
+                        🔄 Public Mirror Sync
+                    </button>
                     <a href="index.html" class="sa-btn sa-btn--ghost">Ana Sayfa</a>
                     <button type="button" class="sa-logout" id="saLogoutBtn">Çıkış Yap</button>
                 </div>
@@ -748,8 +764,7 @@ function shopActionsBar(b) {
     if (!b.slug) {
         return `<p class="sad-act-disabled">Bu dükkan için slug bulunamadı.</p>`;
     }
-    const baseAdmin = getAdminUrl(b.slug);
-    const adminUrl = escapeHtml(baseAdmin ? `${baseAdmin}&fromSuperAdmin=true` : "#");
+    const adminUrl = escapeHtml(buildSuperAdminAdminPanelUrl(b.slug) || "#");
     const bookingUrl = escapeHtml(getBookingUrl(b.slug) || "#");
     const status = b.status || "active";
     const toggleLabel = status === "active" ? "Pasif Et" : "Aktif Et";
@@ -893,7 +908,7 @@ function updateEditLinkTools(slug) {
         waBtn.title = hasSlug ? "" : "Bu dükkan için slug bulunamadı.";
     }
     if (adminLink) {
-        adminLink.href = getAdminUrl(slug) || "#";
+        adminLink.href = buildSuperAdminAdminPanelUrl(slug) || "#";
         adminLink.setAttribute("aria-disabled", hasSlug ? "false" : "true");
         adminLink.classList.toggle("sa-btn--disabled", !hasSlug);
     }
@@ -1106,6 +1121,7 @@ function closeCreateBarberModal() {
 
 function bindPanelEvents(onLogout) {
     document.getElementById("saLogoutBtn")?.addEventListener("click", onLogout);
+    document.getElementById("saSyncPublicBarbersBtn")?.addEventListener("click", runPublicBarbersMigration);
 
     // Adres (İl/İlçe searchable + Mahalle + Açık Adres) seçicilerini kur
     createAddress = setupAddressSelector("create");
@@ -1339,7 +1355,7 @@ function bindPanelEvents(onLogout) {
 
     document.getElementById("openAdminLink")?.addEventListener("click", (e) => {
         const slug = document.getElementById("editSlug")?.value;
-        if (!getAdminUrl(slug)) {
+        if (!buildSuperAdminAdminPanelUrl(slug)) {
             e.preventDefault();
             showToastFn("Bu dükkan için slug bulunamadı.", "error");
         }
@@ -1363,6 +1379,39 @@ function bindPanelEvents(onLogout) {
     document.getElementById("editModal")?.addEventListener("click", (e) => {
         if (e.target.id === "editModal") closeEditModal();
     });
+}
+
+async function runPublicBarbersMigration() {
+    if (!isSuperAdminLoggedIn()) {
+        showToastFn("Bu işlem için Super Admin oturumu gerekli.", "error");
+        return;
+    }
+
+    const confirmed = window.confirm(
+        "Tüm dükkanlar publicBarbers koleksiyonuna kopyalanacak.\n\n" +
+        "Hassas alanlar (şifre, username, telegram vb.) yazılmaz.\n\nDevam edilsin mi?"
+    );
+    if (!confirmed) return;
+
+    const btn = document.getElementById("saSyncPublicBarbersBtn");
+    const prevLabel = btn?.textContent || "";
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = "Senkronize ediliyor...";
+    }
+
+    try {
+        const result = await syncAllPublicBarbersForMigration();
+        showToastFn(`${result.synced} dükkan publicBarbers mirror'a aktarıldı.`);
+    } catch (err) {
+        console.error("[Public Mirror Sync]", err);
+        showToastFn(err?.message || "Public mirror senkronizasyonu başarısız.", "error");
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = prevLabel;
+        }
+    }
 }
 
 export async function mountSuperAdminPanel(mountEl, { showToast, onLogout }) {

@@ -6,8 +6,15 @@ import {
     doc, getDoc, updateDoc, serverTimestamp, runTransaction
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { db } from "./firebase-config.js";
+import {
+    CUSTOMER_GRACE_DAYS,
+    isCustomerBookingAllowed,
+    calculatePublicBookingOpen,
+    getCustomerBlockMessage
+} from "./publicBookingAccess.js";
 
-export const CUSTOMER_GRACE_DAYS = 3;
+export { CUSTOMER_GRACE_DAYS, isCustomerBookingAllowed, calculatePublicBookingOpen, getCustomerBlockMessage };
+
 export const ADMIN_GRACE_DAYS = 7;
 
 export const PACKAGE_TYPES = {
@@ -218,15 +225,6 @@ export function getSubscriptionState(barber) {
     };
 }
 
-/** Müşteri randevu sayfası açık mı? (bitiş + 3 gün grace) */
-export function isCustomerBookingAllowed(barber) {
-    if (!barber) return false;
-    if (barber.status === "passive") return false;
-    const daysAfter = daysAfterSubscriptionEnd(barber);
-    if (daysAfter < 0) return true;
-    return daysAfter <= CUSTOMER_GRACE_DAYS;
-}
-
 /** Berber admin takvimi açık mı? (bitiş + 7 gün grace) */
 export function isAdminCalendarAllowed(barber) {
     if (!barber) return false;
@@ -235,15 +233,11 @@ export function isAdminCalendarAllowed(barber) {
     return daysAfter <= ADMIN_GRACE_DAYS;
 }
 
-export function getCustomerBlockMessage() {
-    return "Bu işletmenin online randevu sistemi geçici olarak kapalıdır.";
-}
-
-export const SHOPIER_URL = "https://www.shopier.com/BerberRandevu";
-
 export function getAdminCalendarLockMessage() {
     return "Abonelik süreniz dolduğu için randevu takvimi kapatıldı. Sistemi kullanmaya devam etmek için Shopier'den aktivasyon kodu satın alıp Abonelik sekmesinden etkinleştirin.";
 }
+
+export const SHOPIER_URL = "https://www.shopier.com/BerberRandevu";
 
 /**
  * Aktivasyon kodunu etkinleştirir.
@@ -258,7 +252,7 @@ export async function activateSubscriptionCode(rawCode, barberSlug) {
     const codeRef = doc(db, "activationCodes", code);
     const barberRef = doc(db, "berberler", barberSlug);
 
-    return runTransaction(db, async (tx) => {
+    const result = await runTransaction(db, async (tx) => {
         const codeSnap = await tx.get(codeRef);
         if (!codeSnap.exists()) {
             throw new Error("Geçersiz aktivasyon kodu.");
@@ -297,4 +291,14 @@ export async function activateSubscriptionCode(rawCode, barberSlug) {
             packageType: codeData.packageType || "monthly"
         };
     });
+
+    try {
+        const { fetchBarber, syncPublicBarber } = await import("./firestoreService.js");
+        const updated = await fetchBarber(barberSlug);
+        if (updated) await syncPublicBarber(barberSlug, updated);
+    } catch (syncErr) {
+        console.error("[Public Mirror] Aktivasyon sonrası sync başarısız:", syncErr);
+    }
+
+    return result;
 }

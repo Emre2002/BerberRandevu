@@ -9,9 +9,14 @@ export const SUPER_ADMIN_SESSION_DURATION = 8 * 60 * 60 * 1000;
 
 /** Berber oturum anahtarları */
 export const BARBER_KEYS = {
-    isLoggedIn: "isLoggedIn",
-    barberSlug: "barberSlug"
+    loggedIn: "barberLoggedIn",
+    slug: "barberSlug",
+    name: "barberName",
+    loginTime: "barberLoginTime"
 };
+
+/** Berber oturum süresi: 8 saat. */
+export const BARBER_SESSION_DURATION = 8 * 60 * 60 * 1000;
 
 /**
  * NOT: Süper Admin oturumu localStorage'da tutulur. Çünkü "Admin" hızlı erişim
@@ -64,28 +69,69 @@ export function logoutSuperAdmin() {
     localStorage.removeItem(SUPER_ADMIN_SESSION);
     localStorage.removeItem(SUPER_ADMIN_ROLE);
     localStorage.removeItem(SUPER_ADMIN_LOGIN_TIME);
-    // Eski sessionStorage kalıntılarını da temizle (geriye dönük uyum).
     sessionStorage.removeItem(SUPER_ADMIN_KEY);
     sessionStorage.removeItem(SUPER_ADMIN_SESSION);
     sessionStorage.removeItem(SUPER_ADMIN_ROLE);
     sessionStorage.removeItem(SUPER_ADMIN_LOGIN_TIME);
 }
 
-export function isBarberLoggedIn(slug) {
-    return (
-        sessionStorage.getItem(BARBER_KEYS.isLoggedIn) === "true" &&
-        sessionStorage.getItem(BARBER_KEYS.barberSlug) === slug
-    );
+export function logoutBarberSession() {
+    Object.values(BARBER_KEYS).forEach((key) => sessionStorage.removeItem(key));
+    sessionStorage.removeItem("isLoggedIn");
 }
 
+export function loginBarberSession({ slug, barberName }) {
+    if (!slug) return;
+    sessionStorage.setItem(BARBER_KEYS.loggedIn, "true");
+    sessionStorage.setItem(BARBER_KEYS.slug, slug);
+    sessionStorage.setItem(BARBER_KEYS.name, barberName || "");
+    sessionStorage.setItem(BARBER_KEYS.loginTime, Date.now().toString());
+    sessionStorage.removeItem("isLoggedIn");
+}
+
+export function isBarberSessionValid() {
+    if (sessionStorage.getItem(BARBER_KEYS.loggedIn) !== "true") return false;
+    const slug = sessionStorage.getItem(BARBER_KEYS.slug);
+    if (!slug) return false;
+
+    const loginTime = Number(sessionStorage.getItem(BARBER_KEYS.loginTime));
+    if (!loginTime || Date.now() - loginTime > BARBER_SESSION_DURATION) {
+        logoutBarberSession();
+        return false;
+    }
+    return true;
+}
+
+export function getLoggedInBarberSlug() {
+    if (!isBarberSessionValid()) return null;
+    return sessionStorage.getItem(BARBER_KEYS.slug);
+}
+
+export function getLoggedInBarberName() {
+    if (!isBarberSessionValid()) return null;
+    return sessionStorage.getItem(BARBER_KEYS.name) || null;
+}
+
+/** Geçerli oturum yoksa null; expectedSlug verilmişse uyuşmazlıkta null döner. */
+export function requireBarberSession(expectedSlug) {
+    if (!isBarberSessionValid()) return null;
+    const slug = sessionStorage.getItem(BARBER_KEYS.slug);
+    if (expectedSlug && slug !== expectedSlug) return null;
+    return slug;
+}
+
+/** @deprecated Geriye dönük uyum — loginBarberSession kullanın. */
 export function loginBarber(slug) {
-    sessionStorage.setItem(BARBER_KEYS.isLoggedIn, "true");
-    sessionStorage.setItem(BARBER_KEYS.barberSlug, slug);
+    loginBarberSession({ slug, barberName: "" });
 }
 
+/** @deprecated Geriye dönük uyum — logoutBarberSession kullanın. */
 export function logoutBarber() {
-    sessionStorage.removeItem(BARBER_KEYS.isLoggedIn);
-    sessionStorage.removeItem(BARBER_KEYS.barberSlug);
+    logoutBarberSession();
+}
+
+export function isBarberLoggedIn(slug) {
+    return requireBarberSession(slug) === slug;
 }
 
 export function getBarberSlugFromUrl() {
@@ -96,8 +142,7 @@ export function getBarberSlugFromUrl() {
 export function guardBarberAdmin() {
     const slug = getBarberSlugFromUrl();
     if (!slug) return null;
-    if (!isBarberLoggedIn(slug)) return null;
-    return slug;
+    return requireBarberSession(slug);
 }
 
 export function guardSuperAdmin() {

@@ -6,6 +6,7 @@ import {
 import { validateSuperAdminLogin } from "./superAdminAuth.js";
 import { mountSuperAdminPanel, unmountSuperAdminPanel } from "./super-admin-panel.js";
 import { migrateVisitDates } from "./migrateVisitDates.js";
+import { syncAllPublicBarbersForMigration } from "./firestoreService.js";
 
 const loginScreen = document.getElementById("saLoginScreen");
 const mountEl = document.getElementById("saAppMount");
@@ -23,23 +24,37 @@ function showToast(msg, type = "success") {
 
 function showLogin() {
     logoutSuperAdmin();
+    clearSuperAdminGlobals();
     unmountSuperAdminPanel(mountEl);
     loginScreen.hidden = false;
     loginForm?.reset();
     loginError?.classList.remove("show");
 }
 
-async function showPanel() {
-    loginScreen.hidden = true;
-    loginError?.classList.remove("show");
-    // Tek seferlik migration'ı yalnızca yetkili oturumda konsoldan erişilebilir kıl:
-    //   await migrateVisitDates({ dryRun: true })  → önizleme
-    //   await migrateVisitDates()                  → uygula
+function registerSuperAdminGlobals() {
     window.migrateVisitDates = migrateVisitDates;
-    await mountSuperAdminPanel(mountEl, {
-        showToast,
-        onLogout: showLogin
-    });
+    window.syncAllPublicBarbersForMigration = syncAllPublicBarbersForMigration;
+}
+
+function clearSuperAdminGlobals() {
+    delete window.migrateVisitDates;
+    delete window.syncAllPublicBarbersForMigration;
+}
+
+async function showPanel() {
+    loginError?.classList.remove("show");
+    registerSuperAdminGlobals();
+    try {
+        await mountSuperAdminPanel(mountEl, {
+            showToast,
+            onLogout: showLogin
+        });
+        loginScreen.hidden = true;
+    } catch (err) {
+        console.error("[SuperAdmin] Panel yüklenemedi:", err);
+        loginScreen.hidden = false;
+        showToast("Panel yüklenemedi. Sayfayı yenileyin.", "error");
+    }
 }
 
 loginForm?.addEventListener("submit", async (e) => {

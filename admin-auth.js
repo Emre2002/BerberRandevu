@@ -1,37 +1,46 @@
-import { validateBarberLogin, fetchBarber } from "./firestoreService.js";
+import { fetchBarber } from "./firestoreService.js";
 import {
-    isBarberLoggedIn,
-    loginBarber,
-    logoutBarber,
+    logoutBarberSession,
     getBarberSlugFromUrl,
-    isSuperAdminLoggedIn
+    isSuperAdminLoggedIn,
+    requireBarberSession,
+    getLoggedInBarberSlug
 } from "./sessionAuth.js";
 
-const slug = getBarberSlugFromUrl();
+const urlSlug = getBarberSlugFromUrl();
+const fromSuperAdminParam = new URLSearchParams(window.location.search).get("fromSuperAdmin") === "true";
 
-// Super Admin modu: geçerli Super Admin oturumu varsa berber şifresi sorulmadan
-// panel açılır. Güvenlik query parametresine DEĞİL, gerçek oturuma dayanır.
 let superAdminMode = false;
-const loginGate = document.getElementById("barberLoginGate");
 const adminPanel = document.getElementById("adminPanel");
-const loginForm = document.getElementById("barberLoginForm");
-const loginError = document.getElementById("barberLoginError");
-const shopNameEl = document.getElementById("barberShopName");
-const shopSlugEl = document.getElementById("barberShopSlug");
-const missingSlugEl = document.getElementById("barberMissingSlug");
-const backLink = document.getElementById("barberBackLink");
+const loginGate = document.getElementById("barberLoginGate");
 
-function showLoginGate() {
-    if (loginGate) loginGate.hidden = false;
-    if (adminPanel) adminPanel.hidden = true;
+function hideLoginGate() {
+    if (loginGate) loginGate.hidden = true;
 }
 
 function showAdminPanel() {
-    if (loginGate) loginGate.hidden = true;
+    hideLoginGate();
     if (adminPanel) adminPanel.hidden = false;
 }
 
-// Admin panelinin üstüne "Super Admin modu" bilgi barını ekler.
+function redirectToLogin() {
+    const returnUrl = `${window.location.pathname}${window.location.search}`;
+    const params = new URLSearchParams();
+    if (returnUrl && returnUrl !== "/giris.html") {
+        params.set("return", returnUrl);
+    }
+    const qs = params.toString();
+    window.location.replace(qs ? `giris.html?${qs}` : "giris.html");
+}
+
+function grantAdminAccess(slug, { superAdmin = false } = {}) {
+    superAdminMode = superAdmin;
+    showAdminPanel();
+    const detail = { slug, superAdmin };
+    window.__barberAdminReadyDetail = detail;
+    window.dispatchEvent(new CustomEvent("barberAdminReady", { detail }));
+}
+
 function injectSuperAdminBar(shopName) {
     if (!adminPanel) return;
     let bar = document.getElementById("superAdminModeBar");
@@ -48,87 +57,66 @@ function injectSuperAdminBar(shopName) {
     if (shopEl && shopName) shopEl.textContent = shopName;
 }
 
-function enterSuperAdminMode() {
-    superAdminMode = true;
-    if (shopSlugEl) shopSlugEl.textContent = slug;
+function enterSuperAdminMode(slug) {
     injectSuperAdminBar(slug);
-    showAdminPanel();
+    grantAdminAccess(slug, { superAdmin: true });
     fetchBarber(slug).then((barber) => {
-        if (barber?.name && shopNameEl) shopNameEl.textContent = barber.name;
         injectSuperAdminBar(barber?.name || slug);
     });
 }
 
 function initGate() {
-    // Geçici debug — üretimde kaldırılabilir.
-    console.log("Super admin session:", isSuperAdminLoggedIn());
-    console.log("Admin slug:", slug);
+    hideLoginGate();
 
-    if (!slug) {
-        if (missingSlugEl) missingSlugEl.hidden = false;
-        if (loginForm) loginForm.hidden = true;
-        showLoginGate();
-        return;
-    }
-
-    // 1) Geçerli Super Admin oturumu varsa berber girişi atlanır.
+    // 1) Geçerli Super Admin oturumu — berber session / şifre gerekmez; slug eşleşmesi aranmaz.
     if (isSuperAdminLoggedIn()) {
-        enterSuperAdminMode();
+        if (!urlSlug) {
+            redirectToLogin();
+            return;
+        }
+        enterSuperAdminMode(urlSlug);
         return;
     }
 
-    // 2) Normal berber giriş akışı (değişmedi).
-    if (missingSlugEl) missingSlugEl.hidden = true;
-    if (loginForm) loginForm.hidden = false;
-    if (shopSlugEl) shopSlugEl.textContent = slug;
-    if (backLink) backLink.href = `randevu.html?dukkan=${encodeURIComponent(slug)}`;
-
-    fetchBarber(slug).then((barber) => {
-        if (barber?.name && shopNameEl) shopNameEl.textContent = barber.name;
-    });
-
-    if (isBarberLoggedIn(slug)) {
-        showAdminPanel();
-    } else {
-        showLoginGate();
+    // 2) fromSuperAdmin URL parametresi tek başına bypass değildir.
+    if (fromSuperAdminParam) {
+        redirectToLogin();
+        return;
     }
+
+    // 3) Normal berber oturumu
+    if (!urlSlug) {
+        const sessionSlug = getLoggedInBarberSlug();
+        if (sessionSlug) {
+            window.location.replace(`admin.html?dukkan=${encodeURIComponent(sessionSlug)}`);
+            return;
+        }
+        redirectToLogin();
+        return;
+    }
+
+    const sessionSlug = requireBarberSession(urlSlug);
+    if (sessionSlug) {
+        grantAdminAccess(sessionSlug, { superAdmin: false });
+        return;
+    }
+
+    const validSessionSlug = getLoggedInBarberSlug();
+    if (validSessionSlug && validSessionSlug !== urlSlug) {
+        window.location.replace(`admin.html?dukkan=${encodeURIComponent(validSessionSlug)}`);
+        return;
+    }
+
+    redirectToLogin();
 }
 
-loginForm?.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    if (!slug) return;
-
-    loginError.hidden = true;
-    const btn = document.getElementById("barberLoginBtn");
-    btn.disabled = true;
-    btn.textContent = "Giriş yapılıyor...";
-
-    try {
-        await validateBarberLogin(
-            slug,
-            document.getElementById("barberUsername").value,
-            document.getElementById("barberPassword").value
-        );
-        loginBarber(slug);
-        showAdminPanel();
-    } catch (err) {
-        loginError.hidden = false;
-        loginError.textContent = err.message || "Giriş başarısız.";
-    } finally {
-        btn.disabled = false;
-        btn.textContent = "Giriş Yap";
-    }
-});
-
 document.getElementById("btnLogout")?.addEventListener("click", () => {
-    // Super Admin modunda: oturumu SİLME, sadece Super Admin paneline dön.
     if (superAdminMode) {
         window.location.href = "super-admin.html";
         return;
     }
-    logoutBarber();
-    showLoginGate();
-    loginForm?.reset();
+    logoutBarberSession();
+    redirectToLogin();
 });
 
 initGate();

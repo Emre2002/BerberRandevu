@@ -1,5 +1,6 @@
 import { doc, updateDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { db } from "./firebase-config.js";
+import { fetchBarber, syncPublicBarber } from "./firestoreService.js";
 
 export const BARBER_SERVICES_CATALOG = [
     "Saç Kesimi & Yıkama",
@@ -331,6 +332,8 @@ export function initServicesAdmin(barberSlug, showToast, opts = {}) {
         saveBtn.disabled = true;
         try {
             await updateDoc(doc(db, "berberler", barberSlug), { selectedServices: payload });
+            const updated = await fetchBarber(barberSlug);
+            if (updated) await syncPublicBarber(barberSlug, updated);
             showToast("Hizmetler kaydedildi.");
             opts.onUpdated?.(payload);
         } catch (e) {

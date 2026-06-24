@@ -16,9 +16,85 @@ import {
     getAdminUrl,
     getWhatsAppBookingMessage
 } from "./linkService.js";
-import { isCustomerBookingAllowed, getCustomerBlockMessage } from "./subscriptionService.js";
+import { getCustomerBlockMessage, calculatePublicBookingOpen } from "./publicBookingAccess.js";
 
 const BARBERS = "berberler";
+const PUBLIC_BARBERS = "publicBarbers";
+
+function trimStr(value) {
+    return typeof value === "string" ? value.trim() : "";
+}
+
+/**
+ * Yalnızca public alanları seçer; username/password/telegram/abonelik alanlarını asla dahil etmez.
+ */
+export function buildPublicBarberData(barber, slug) {
+    const resolvedSlug = slug || barber?.slug || "";
+    const payload = {
+        slug: resolvedSlug,
+        name: trimStr(barber?.name),
+        address: trimStr(barber?.address),
+        city: trimStr(barber?.city),
+        district: trimStr(barber?.district),
+        neighborhood: trimStr(barber?.neighborhood),
+        addressDetail: trimStr(barber?.addressDetail),
+        phone: trimStr(barber?.phone),
+        whatsapp: trimStr(barber?.whatsapp),
+        openHour: trimStr(barber?.openHour || barber?.openingHour),
+        closeHour: trimStr(barber?.closeHour || barber?.closingHour),
+        logoUrl: trimStr(barber?.logoUrl),
+        coverUrl: trimStr(barber?.coverUrl),
+        mapsLink: trimStr(barber?.mapsLink),
+        status: barber?.status || "active",
+        bookingOpen: calculatePublicBookingOpen(barber)
+    };
+
+    if (Array.isArray(barber?.selectedServices) && barber.selectedServices.length > 0) {
+        payload.selectedServices = barber.selectedServices.filter((s) => typeof s === "string");
+    }
+
+    return payload;
+}
+
+/** Müşteri randevu sayfası için public dükkan bilgisi. Yoksa legacy berberler fallback (uyarı ile). */
+export async function fetchPublicBarber(slug) {
+    const normalized = normalizeSlug(slug) || String(slug || "").trim();
+    if (!normalized) return null;
+
+    const pubSnap = await getDoc(doc(db, PUBLIC_BARBERS, normalized));
+    if (pubSnap.exists()) {
+        return { slug: pubSnap.id, ...pubSnap.data() };
+    }
+
+    console.warn(`publicBarbers/${normalized} bulunamadı. Public Mirror Sync çalıştırılmalı.`);
+    const legacy = await fetchBarber(normalized);
+    if (!legacy) return null;
+    return buildPublicBarberData(legacy, normalized);
+}
+
+/** publicBarbers/{slug} mirror — yalnızca public alanlar yazılır. */
+export async function syncPublicBarber(slug, barberData) {
+    const normalized = normalizeSlug(slug) || String(slug || "").trim();
+    if (!normalized || !barberData) return;
+
+    const publicData = buildPublicBarberData({ ...barberData, slug: normalized }, normalized);
+    await setDoc(doc(db, PUBLIC_BARBERS, normalized), {
+        ...publicData,
+        updatedAt: serverTimestamp()
+    }, { merge: true });
+}
+
+/**
+ * Tüm berberler → publicBarbers migration (SuperAdmin konsolundan manuel çağrılır).
+ * @returns {Promise<{ synced: number }>}
+ */
+export async function syncAllPublicBarbersForMigration() {
+    const barbers = await fetchAllBarbers();
+    for (const barber of barbers) {
+        await syncPublicBarber(barber.slug, barber);
+    }
+    return { synced: barbers.length };
+}
 
 export function normalizeSlug(raw) {
     const trMap = { ç: "c", ğ: "g", ı: "i", ö: "o", ş: "s", ü: "u", Ç: "c", Ğ: "g", İ: "i", I: "i", Ö: "o", Ş: "s", Ü: "u" };
@@ -73,6 +149,35 @@ export async function fetchBarber(slug) {
     const snap = await getDoc(doc(db, BARBERS, slug));
     if (!snap.exists()) return null;
     return { slug: snap.id, ...snap.data() };
+}
+
+const BARBER_LOGIN_ERROR = "Kullanıcı adı veya şifre hatalı.";
+
+/**
+ * Kullanıcı adı + şifre ile dükkanı çözer (slug bilgisi gerekmez).
+ * Tek Firestore sorgusu: berberler.username == normalizeUsername(username)
+ */
+export async function resolveBarberLogin(username, password) {
+    const normalized = normalizeUsername(username);
+    if (!normalized || !password) {
+        throw new Error(BARBER_LOGIN_ERROR);
+    }
+
+    const q = query(collection(db, BARBERS), where("username", "==", normalized));
+    const snap = await getDocs(q);
+
+    if (snap.empty) {
+        throw new Error(BARBER_LOGIN_ERROR);
+    }
+
+    const docSnap = snap.docs[0];
+    const barber = { slug: docSnap.id, ...docSnap.data() };
+
+    if (password !== barber.password) {
+        throw new Error(BARBER_LOGIN_ERROR);
+    }
+
+    return { slug: barber.slug, barber };
 }
 
 /**
@@ -140,7 +245,7 @@ export async function createBarber({
 
     const subscriptionEndDate = customSubscriptionEndDate || defaultSubscriptionEndDate(1);
 
-    await setDoc(doc(db, BARBERS, normalizedSlug), {
+    const barberPayload = {
         name: name.trim(),
         slug: normalizedSlug,
         address: address.trim(),
@@ -165,7 +270,10 @@ export async function createBarber({
         lastActivationCode: "",
         lastSubscriptionUpdate: null,
         createdAt: serverTimestamp()
-    });
+    };
+
+    await setDoc(doc(db, BARBERS, normalizedSlug), barberPayload);
+    await syncPublicBarber(normalizedSlug, barberPayload);
 
     return { slug: normalizedSlug, username: normalizedUsername };
 }
@@ -195,11 +303,16 @@ export async function updateBarber(slug, data, currentSlug = slug) {
     }
 
     await updateDoc(doc(db, BARBERS, slug), payload);
+
+    const updated = await fetchBarber(slug);
+    if (updated) await syncPublicBarber(slug, updated);
 }
 
 export async function toggleBarberStatus(slug, currentStatus) {
     const newStatus = currentStatus === "active" ? "passive" : "active";
     await updateDoc(doc(db, BARBERS, slug), { status: newStatus });
+    const updated = await fetchBarber(slug);
+    if (updated) await syncPublicBarber(slug, updated);
     return newStatus;
 }
 
@@ -222,11 +335,15 @@ export async function extendSubscription(slug, months) {
         lastSubscriptionUpdate: serverTimestamp()
     });
 
+    const updated = await fetchBarber(slug);
+    if (updated) await syncPublicBarber(slug, updated);
+
     return subscriptionEndDate;
 }
 
 export async function removeBarber(slug) {
     await deleteDoc(doc(db, BARBERS, slug));
+    await deleteDoc(doc(db, PUBLIC_BARBERS, slug)).catch(() => {});
 }
 
 export function getCustomerLink(slug) {
@@ -254,7 +371,19 @@ export function getBarberBlockReason(barber) {
             message: "Bu işletme geçici olarak hizmet vermemektedir."
         };
     }
-    if (!isCustomerBookingAllowed(barber)) {
+    const hasSubscriptionFields =
+        barber.subscriptionEndDate !== undefined ||
+        barber.subscriptionStatus !== undefined;
+    if (!hasSubscriptionFields && barber.bookingOpen !== undefined) {
+        if (barber.bookingOpen === false) {
+            return {
+                blocked: true,
+                message: getCustomerBlockMessage()
+            };
+        }
+        return { blocked: false, message: "" };
+    }
+    if (!calculatePublicBookingOpen(barber)) {
         return {
             blocked: true,
             message: getCustomerBlockMessage()

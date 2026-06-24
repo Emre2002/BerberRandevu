@@ -1,5 +1,5 @@
 import { db } from "./firebase-config.js";
-import { getBarberBlockReason } from "./firestoreService.js";
+import { getBarberBlockReason, fetchPublicBarber } from "./firestoreService.js";
 import { createAppointmentWithEffects, findActiveAppointmentByPhoneOnDay } from "./appointmentService.js";
 import { normalizePhone } from "./customerService.js";
 import {
@@ -46,7 +46,8 @@ import {
 const urlParams = new URLSearchParams(window.location.search);
 const urlSlug = urlParams.get("dukkan") || urlParams.get("randevu") || urlParams.get("shop") || "";
 const isCustomerPageEarly = typeof document !== "undefined" && document.getElementById?.("slotsContainer");
-const aktifDukkan = urlSlug || (isCustomerPageEarly ? "x-men" : urlSlug);
+const isAdminPageEarly = typeof document !== "undefined" && document.getElementById?.("calendarGrid");
+let aktifDukkan = urlSlug || (isCustomerPageEarly ? "x-men" : "");
 
 /** Admin panelinde abonelik kilidi için önbellek (ekstra Firestore read yok). */
 let cachedBarberData = null;
@@ -181,20 +182,37 @@ function kurYolTarifiButonu(mapsLink) {
 async function dukkanArayuzunuDinamikYap() {
     const isCustomerPage = Boolean(document.getElementById("slotsContainer"));
     try {
-        const dukkanRef = doc(db, "berberler", aktifDukkan);
-        const dukkanSnap = await getDoc(dukkanRef);
+        let veri = null;
 
-        if (dukkanSnap.exists()) {
-            const veri = dukkanSnap.data();
-            cachedBarberData = { slug: aktifDukkan, ...veri };
-
-            if (isCustomerPage) {
-                const block = getBarberBlockReason(veri);
-                if (block.blocked) {
-                    renderBookingNoticeScreen("⚠️", "Şu An Hizmet Verilemiyor", block.message);
-                    return false;
-                }
+        if (isCustomerPage) {
+            veri = await fetchPublicBarber(aktifDukkan);
+            if (!veri) {
+                console.log("Firebase'de dükkan bulunamadı:", aktifDukkan);
+                renderBookingNoticeScreen(
+                    "🔍",
+                    "İşletme Bulunamadı",
+                    "Aradığınız randevu sayfası mevcut değil. Lütfen bağlantının doğru olduğundan emin olun."
+                );
+                return false;
             }
+            cachedBarberData = veri;
+
+            const block = getBarberBlockReason(veri);
+            if (block.blocked) {
+                renderBookingNoticeScreen("⚠️", "Şu An Hizmet Verilemiyor", block.message);
+                return false;
+            }
+        } else {
+            const dukkanSnap = await getDoc(doc(db, "berberler", aktifDukkan));
+            if (!dukkanSnap.exists()) {
+                console.log("Firebase'de dükkan bulunamadı:", aktifDukkan);
+                return true;
+            }
+            veri = dukkanSnap.data();
+            cachedBarberData = { slug: aktifDukkan, ...veri };
+        }
+
+        if (veri) {
             
             // 1. BERBER ADI GÜNCELLEME
             const berberAdi = veri.name || veri.isim || veri.altinmakas || veri.bedirhan || veri["Ahmet Yılmaz"] || "Elite Berber";
@@ -252,17 +270,6 @@ async function dukkanArayuzunuDinamikYap() {
                 img.alt = "Logo";
                 img.style.cssText = "width:64px;height:64px;border-radius:50%;object-fit:cover;";
                 logoArea.appendChild(img);
-            }
-
-        } else {
-            console.log("Firebase'de dükkan bulunamadı:", aktifDukkan);
-            if (isCustomerPage) {
-                renderBookingNoticeScreen(
-                    "🔍",
-                    "İşletme Bulunamadı",
-                    "Aradığınız randevu sayfası mevcut değil. Lütfen bağlantının doğru olduğundan emin olun."
-                );
-                return false;
             }
         }
         return true;
@@ -1508,6 +1515,29 @@ function initAdminPage() {
     }
 }
 
+function startAdminApp(slug) {
+    if (!slug) return;
+    aktifDukkan = slug;
+    dukkanArayuzunuDinamikYap().then((canContinue) => {
+        if (!canContinue) return;
+        initAdminPage();
+    });
+}
+
+function initAdminWhenAuthed() {
+    if (!isAdminPageEarly) return;
+
+    const onReady = (detail) => {
+        if (detail?.slug) startAdminApp(detail.slug);
+    };
+
+    window.addEventListener("barberAdminReady", (e) => onReady(e.detail), { once: true });
+
+    if (window.__barberAdminReadyDetail?.slug) {
+        onReady(window.__barberAdminReadyDetail);
+    }
+}
+
 function init() {
     if (!db) {
         const msg = "Firebase bağlantısı kurulamadı. Sayfayı bir web sunucusu üzerinden açtığınızdan emin olun (file:// yerine http://).";
@@ -1517,15 +1547,15 @@ function init() {
         return;
     }
 
+    if (isAdminPageEarly) {
+        initAdminWhenAuthed();
+        return;
+    }
+
     dukkanArayuzunuDinamikYap().then((canContinue) => {
         if (!canContinue) return;
-
         if (document.getElementById("slotsContainer")) {
             initCustomerPage();
-        }
-
-        if (document.getElementById("calendarGrid") && aktifDukkan) {
-            initAdminPage();
         }
     });
 }
