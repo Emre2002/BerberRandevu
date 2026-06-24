@@ -645,6 +645,43 @@ function initCustomerPage() {
 
     let selectedSlot = null;
     let phoneDuplicateBlocked = false;
+    let bookingInProgress = false;
+    let lastSubmitAt = 0;
+    const bookingFormReadyAt = Date.now();
+    const MIN_FORM_MS = 3000;
+    const SUBMIT_COOLDOWN_MS = 2000;
+    const PHONE_COOLDOWN_MS = 5 * 60 * 1000;
+    const MSG_HONEYPOT = "Randevu oluşturulamadı. Lütfen tekrar deneyin.";
+    const MSG_MIN_FORM = "Lütfen bilgileri kontrol edip birkaç saniye sonra tekrar deneyin.";
+    const MSG_PHONE_COOLDOWN =
+        "Bu telefon numarasıyla kısa süre önce işlem yapıldı. Lütfen birkaç dakika sonra tekrar deneyin.";
+
+    function getPhoneCooldownKey(phone) {
+        return `bookingCooldown_${aktifDukkan}_${normalizePhone(phone)}`;
+    }
+
+    function isPhoneCooldownActive(phone) {
+        try {
+            const until = Number(localStorage.getItem(getPhoneCooldownKey(phone)));
+            return Number.isFinite(until) && until > Date.now();
+        } catch {
+            return false;
+        }
+    }
+
+    function setPhoneCooldown(phone) {
+        try {
+            localStorage.setItem(getPhoneCooldownKey(phone), String(Date.now() + PHONE_COOLDOWN_MS));
+        } catch { /* gizli mod */ }
+    }
+
+    function finishBookingSubmit() {
+        setTimeout(() => {
+            bookingInProgress = false;
+            if (btnBook) btnBook.textContent = "Randevuyu Onayla";
+            updateBookButton();
+        }, SUBMIT_COOLDOWN_MS);
+    }
 
     const DUPLICATE_APPOINTMENT_MSG =
         "Bu telefon numarası ile bugün için zaten bir randevu bulunmaktadır. Gün içerisinde yalnızca 1 randevu oluşturabilirsiniz.";
@@ -851,7 +888,8 @@ function initCustomerPage() {
         const phoneOk = phone === "" || isValidTurkishPhone(phone);
         showPhoneError(phone !== "" && !phoneOk);
         if (btnBook) {
-            btnBook.disabled = !(name && phone && phoneOk && service && selectedSlot && !phoneDuplicateBlocked);
+            btnBook.disabled = bookingInProgress ||
+                !(name && phone && phoneOk && service && selectedSlot && !phoneDuplicateBlocked);
         }
     }
 
@@ -940,6 +978,23 @@ function initCustomerPage() {
 
     if (btnBook) {
         btnBook.addEventListener("click", async () => {
+            if (bookingInProgress) return;
+
+            const honeypotVal = document.getElementById("bookingHoneypot")?.value?.trim();
+            if (honeypotVal) {
+                showToast(MSG_HONEYPOT, "error");
+                return;
+            }
+
+            if (Date.now() - bookingFormReadyAt < MIN_FORM_MS) {
+                showToast(MSG_MIN_FORM, "error");
+                return;
+            }
+
+            if (lastSubmitAt && Date.now() - lastSubmitAt < SUBMIT_COOLDOWN_MS) {
+                return;
+            }
+
             const customerName = document.getElementById("customerName").value.trim();
             const phone = document.getElementById("customerPhone").value.trim();
             const service = document.getElementById("serviceSelect").value;
@@ -947,6 +1002,18 @@ function initCustomerPage() {
 
             if (!customerName || !phone || !service || !selectedSlot) return;
 
+            if (!isValidTurkishPhone(phone)) {
+                showPhoneError(true);
+                return;
+            }
+
+            if (isPhoneCooldownActive(phone)) {
+                showToast(MSG_PHONE_COOLDOWN, "error");
+                return;
+            }
+
+            bookingInProgress = true;
+            lastSubmitAt = Date.now();
             btnBook.disabled = true;
             btnBook.textContent = "Kaydediliyor...";
 
@@ -981,8 +1048,11 @@ function initCustomerPage() {
                     date,
                     time: selectedSlot,
                     status: "confirmed",
-                    musteriNotu
+                    musteriNotu,
+                    website: document.getElementById("bookingHoneypot")?.value?.trim() || ""
                 });
+
+                setPhoneCooldown(phone);
 
                 const successDetails = {
                     shopName: getShopDisplayName(),
@@ -1009,8 +1079,7 @@ function initCustomerPage() {
                 console.error(err);
                 showToast(firestoreErrorMessage(err), "error");
             } finally {
-                btnBook.textContent = "Randevuyu Onayla";
-                updateBookButton();
+                finishBookingSubmit();
             }
         });
     }
@@ -1313,7 +1382,8 @@ function initAdminPage() {
                             date,
                             time,
                             status: "confirmed",
-                            musteriNotu: ""
+                            musteriNotu: "",
+                            forceClient: true
                         });
                         closeModal();
                         showToast(`${customerName} için randevu kaydedildi.`);

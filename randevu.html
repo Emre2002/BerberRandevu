@@ -2,6 +2,8 @@
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <link rel="alternate icon" href="favicon.ico">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="Online berber randevu sayfası. Dükkanınızın çalışma saatleri içinde boş slotu seçin, saniyeler içinde randevunuzu oluşturun.">
     <meta name="robots" content="noindex, nofollow">
@@ -24,6 +26,17 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
+    <style>
+        .booking-honeypot {
+            position: absolute;
+            left: -9999px;
+            width: 1px;
+            height: 1px;
+            overflow: hidden;
+            opacity: 0;
+            pointer-events: none;
+        }
+    </style>
 </head>
 <body>
     <div id="bookingRoot">
@@ -109,6 +122,10 @@
                 <div class="form-group">
                     <label for="customerNote">Randevu Notu / Mesajınız (Opsiyonel)</label>
                     <textarea id="customerNote" rows="3" placeholder="Berbere iletmek istediğiniz bir not varsa buraya yazabilirsiniz..."></textarea>
+                </div>
+                <div class="form-group booking-honeypot" aria-hidden="true">
+                    <label for="bookingHoneypot">Website</label>
+                    <input type="text" id="bookingHoneypot" name="website" tabindex="-1" autocomplete="off">
                 </div>
                 <button class="btn btn-primary" id="btnBook" disabled>Randevuyu Onayla</button>
             </section>

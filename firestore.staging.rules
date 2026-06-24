@@ -1,0 +1,181 @@
+rules_version = '2';
+
+// =============================================================================
+// STAGING TASLAK — PRODUCTION'A DEPLOY ETME
+// =============================================================================
+//
+// Amaç: Müşteri direct write kapatıldığında hedef güvenlik modelini test etmek.
+// Bu dosya yalnızca staging Firebase projesinde veya emulator'da denenmelidir.
+//
+// Staging deploy örneği (AYRI PROJE):
+//   1. .firebaserc içine "staging": "berberrandevu-staging" alias ekle
+//   2. firebase.json'da staging için rules dosyasını geçici olarak değiştir
+//   3. firebase deploy --only firestore:rules --project staging
+//
+// ÖN KOŞULLAR (Stage 5-6 öncesi):
+//   - Müşteri randevu default CF yolu aktif
+//   - Firebase Auth + custom claims (barberSlug, superAdmin)
+//   - createAppointmentAdmin CF (admin randevu)
+//   - Admin panel auth token ile Firestore erişimi
+//
+// =============================================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // -------------------------------------------------------------------------
+    // Yardımcılar (Auth hazır olunca aktif edilecek)
+    // -------------------------------------------------------------------------
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isSuperAdmin() {
+      return isSignedIn() && request.auth.token.superAdmin == true;
+    }
+
+    function isBarberOf(slug) {
+      return isSignedIn() && request.auth.token.barberSlug == slug;
+    }
+
+    function isBarberOrSuperAdmin(slug) {
+      return isSuperAdmin() || isBarberOf(slug);
+    }
+
+    // Müşteri slot sorgusu: where barberId + date (sıra önemli değil, ikisi de ==)
+    function isCustomerAppointmentSlotQuery() {
+      return request.query != null
+        && request.query.limit <= 50
+        && request.query.filters.size() == 2
+        && (
+          (request.query.filters[0].field.path == ['barberId']
+            && request.query.filters[0].op == '=='
+            && request.query.filters[1].field.path == ['date']
+            && request.query.filters[1].op == '==')
+          || (request.query.filters[1].field.path == ['barberId']
+            && request.query.filters[1].op == '=='
+            && request.query.filters[0].field.path == ['date']
+            && request.query.filters[0].op == '==')
+        );
+    }
+
+    // blockedSlots: where date == (tek filtre)
+    function isBlockedSlotsDayQuery() {
+      return request.query != null
+        && request.query.limit <= 50
+        && request.query.filters.size() == 1
+        && request.query.filters[0].field.path == ['date']
+        && request.query.filters[0].op == '==';
+    }
+
+    // -------------------------------------------------------------------------
+    // publicBarbers — müşteri randevu sayfası (Faz 5B)
+    // -------------------------------------------------------------------------
+    match /publicBarbers/{slug} {
+      allow read: if true;
+      allow write: if false; // sync: Admin SDK / authenticated SuperAdmin CF
+    }
+
+    // -------------------------------------------------------------------------
+    // appointments — yazım yalnız Cloud Function (Admin SDK)
+    // -------------------------------------------------------------------------
+    match /appointments/{docId} {
+      // GEÇİCİ: Müşteri slot grid için barberId+date list sorgusu.
+      // UYARI: Dokümanda customerName/phone da döner — uzun vadede
+      // getDayAvailability CF veya publicSlotMirror tercih edilmeli.
+      allow list: if isCustomerAppointmentSlotQuery();
+      allow get: if false;
+
+      allow create, update, delete: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // customers — CRM (yalnız authenticated berber / SuperAdmin)
+    // -------------------------------------------------------------------------
+    match /customers/{docId} {
+      allow read, write: if isSuperAdmin()
+        || (isSignedIn() && resource.data.barberSlug == request.auth.token.barberSlug);
+      allow create: if isSuperAdmin()
+        || (isSignedIn() && request.resource.data.barberSlug == request.auth.token.barberSlug);
+    }
+
+    // -------------------------------------------------------------------------
+    // notifications — berber paneli
+    // -------------------------------------------------------------------------
+    match /notifications/{docId} {
+      allow read: if isSuperAdmin()
+        || (isSignedIn() && resource.data.barberSlug == request.auth.token.barberSlug);
+      allow write: if false; // oluşturma CF; okundu işareti auth ile sonra
+    }
+
+    // -------------------------------------------------------------------------
+    // rateLimits / appointmentAttempts — yalnız Cloud Function (Admin SDK)
+    // -------------------------------------------------------------------------
+    match /rateLimits/{docId} {
+      allow read, write: if false;
+    }
+
+    match /appointmentAttempts/{docId} {
+      allow read, write: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // activationCodes — abonelik (SuperAdmin + berber aktivasyon CF)
+    // -------------------------------------------------------------------------
+    match /activationCodes/{code} {
+      allow read, write: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // berberler — hassas alanlar (şifre, telegram, abonelik)
+    // Production'da Auth olmadan uygulanmamalı.
+    // -------------------------------------------------------------------------
+    match /berberler/{slug} {
+      allow read, write: if isBarberOrSuperAdmin(slug);
+
+      // GEÇİCİ müşteri read: legacy randevu + kapalı slot alt koleksiyonları
+      match /blockedSlots/{docId} {
+        allow list: if isBlockedSlotsDayQuery();
+        allow get: if true;
+        allow write: if isBarberOrSuperAdmin(slug);
+      }
+
+      match /appointments/{date} {
+        allow get: if true; // legacy gün dokümanı — müşteri slot birleştirme
+        allow list, write: if isBarberOrSuperAdmin(slug);
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // Diğer koleksiyonlar — staging'de kilitli (Auth/CF sonrası açılacak)
+    // -------------------------------------------------------------------------
+    match /payments/{docId} {
+      allow read, write: if isSuperAdmin();
+    }
+
+    match /campaigns/{docId} {
+      allow read, write: if isSuperAdmin()
+        || (isSignedIn() && resource.data.barberSlug == request.auth.token.barberSlug);
+    }
+
+    match /deletedAppointments/{docId} {
+      allow read, write: if isSuperAdmin()
+        || (isSignedIn() && resource.data.barberSlug == request.auth.token.barberSlug);
+    }
+
+    match /demo_talepleri/{docId} {
+      allow create: if true; // landing form
+      allow read, update, delete: if isSuperAdmin();
+    }
+
+    match /pendingBarbers/{docId} {
+      allow read, write: if isSuperAdmin();
+    }
+
+    // Tanımsız koleksiyonlar — varsayılan red
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
