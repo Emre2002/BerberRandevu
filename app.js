@@ -370,6 +370,9 @@ function showError(container, message) {
     container.innerHTML = `<div class="slots-error">${message}</div>`;
 }
 
+const TECHNICAL_UI_PATTERN =
+    /firebase|firestore|console|token|app\s*check|cfbooking|forceclient|super\s*admin|cloud\s*function|rate\s*limit|functions\//i;
+
 function firestoreErrorMessage(err) {
     const code = err?.code || "";
     if (code === "permission-denied") {
@@ -379,6 +382,39 @@ function firestoreErrorMessage(err) {
         return "Firebase sunucusuna ulaşılamıyor. İnternet bağlantınızı kontrol edin.";
     }
     return err?.message || "Bilinmeyen bir hata oluştu.";
+}
+
+/** Müşteri randevu sayfası — teknik terim içermeyen hata metinleri. */
+function customerErrorMessage(err, preferred) {
+    const msg = preferred || err?.message || "";
+    if (msg && !TECHNICAL_UI_PATTERN.test(msg)) {
+        return msg;
+    }
+    const code = String(err?.code || "");
+    if (code === "permission-denied" || code.includes("permission-denied")) {
+        return "Şu anda bilgilere erişilemiyor. Lütfen daha sonra tekrar deneyin.";
+    }
+    if (code === "unavailable" || code.includes("unavailable")) {
+        return "Sunucuya ulaşılamıyor. İnternet bağlantınızı kontrol edip tekrar deneyin.";
+    }
+    return "Bir sorun oluştu. Lütfen tekrar deneyin.";
+}
+
+/** Müşteri sayfasında kalmış yönetim/giriş linklerini DOM'dan kaldırır. */
+function stripCustomerAdminHints() {
+    document.getElementById("adminPanelLink")?.remove();
+
+    const root = document.getElementById("bookingRoot") || document.body;
+    root.querySelectorAll(
+        'a[href*="admin.html"], a[href*="giris.html"], a[href*="super-admin"], a[href*="barber-login"]'
+    ).forEach((el) => el.remove());
+
+    root.querySelectorAll("a").forEach((el) => {
+        const text = (el.textContent || "").trim().toLowerCase();
+        if (/yönetim|admin panel|berber giriş|super\s*admin|debug|test panel/.test(text)) {
+            el.remove();
+        }
+    });
 }
 
 async function fetchNewAppointments(date) {
@@ -637,6 +673,7 @@ function initCustomerPage() {
     const slotsContainer = document.getElementById("slotsContainer");
     if (!slotsContainer) return;
 
+    stripCustomerAdminHints();
     setRandomMotivationQuote();
 
     renderCustomerServicePicker(getEffectiveSelectedServices(cachedBarberData), {
@@ -943,7 +980,7 @@ function initCustomerPage() {
             renderSlots(slotsContainer, date, appointments, blocked, false, onSlotSelect);
         } catch (err) {
             console.error("Saatler yüklenemedi:", err);
-            showError(slotsContainer, firestoreErrorMessage(err));
+            showError(slotsContainer, customerErrorMessage(err));
             showToast("Saatler yüklenemedi.", "error");
         }
     }
@@ -1077,7 +1114,7 @@ function initCustomerPage() {
                 await loadTodayCount();
             } catch (err) {
                 console.error(err);
-                showToast(firestoreErrorMessage(err), "error");
+                showToast(customerErrorMessage(err), "error");
             } finally {
                 finishBookingSubmit();
             }
@@ -1610,10 +1647,20 @@ function initAdminWhenAuthed() {
 
 function init() {
     if (!db) {
-        const msg = "Firebase bağlantısı kurulamadı. Sayfayı bir web sunucusu üzerinden açtığınızdan emin olun (file:// yerine http://).";
-        showError(document.getElementById("slotsContainer"), msg);
-        showError(document.getElementById("calendarGrid"), msg);
-        showToast(msg, "error");
+        const customerMsg =
+            "Bağlantı kurulamadı. Lütfen sayfayı yenileyin veya daha sonra tekrar deneyin.";
+        const adminMsg =
+            "Firebase bağlantısı kurulamadı. Sayfayı bir web sunucusu üzerinden açtığınızdan emin olun (file:// yerine http://).";
+        const slotsEl = document.getElementById("slotsContainer");
+        const calendarEl = document.getElementById("calendarGrid");
+        if (slotsEl) {
+            showError(slotsEl, customerMsg);
+            showToast(customerMsg, "error");
+        }
+        if (calendarEl) {
+            showError(calendarEl, adminMsg);
+            showToast(adminMsg, "error");
+        }
         return;
     }
 
@@ -1639,52 +1686,26 @@ if (document.readyState === "loading") {
 } else {
     init();
 }
-// === BUTONLARIN LİNKİNİ DÜKKANA GÖRE OTOMATİK AYARLAYAN SİHİRBAZ ===
-function butonLinkleriniGuncelle() {
-    const urlParams = new URLSearchParams(window.location.search);
-    const gecerliDukkan = urlParams.get("dukkan") || urlParams.get("randevu") || urlParams.get("shop") || aktifDukkan || "x-men";
-
-    // 1. Randevu sayfasındaki "Yönetim Paneli" butonunu dükkana göre yönlendir
-    const adminPanelLink = document.getElementById("adminPanelLink");
-    if (adminPanelLink) {
-        adminPanelLink.href = `admin.html?dukkan=${encodeURIComponent(gecerliDukkan)}`;
+/** Admin panelindeki "Müşteri Paneline Dön" linkini slug'a göre günceller. */
+function updateAdminBackToClientLink() {
+    if (!document.getElementById("calendarGrid") && !document.getElementById("barberLoginGate")) {
+        return;
     }
 
-    // 2. Admin panelindeki "Müşteri Paneline Dön" butonunu randevu sayfasına yönlendir.
-    //    Yalnızca bilinen ID/metin hedeflenir; randevu sayfasındaki "Ana Sayfa" linki korunur.
-    const btnMusteriDon = document.getElementById("backToClientLink") ||
-                          document.getElementById("barberBackLink") ||
-                          Array.from(document.querySelectorAll("a")).find(el =>
-                              el.textContent.includes("Müşteri Paneline Dön") ||
-                              el.textContent.includes("Müşteri sayfasına dön"));
+    const backLink = document.getElementById("backToClientLink") ||
+        document.getElementById("barberBackLink");
+    if (!backLink || backLink.tagName !== "A") return;
 
-    if (btnMusteriDon && btnMusteriDon.tagName === "A") {
-        btnMusteriDon.href = `randevu.html?dukkan=${encodeURIComponent(gecerliDukkan)}`;
-    }
+    const params = new URLSearchParams(window.location.search);
+    const slug = params.get("dukkan") || params.get("randevu") || params.get("shop") || aktifDukkan;
+
+    backLink.href = slug
+        ? `randevu.html?dukkan=${encodeURIComponent(slug)}`
+        : "index.html";
 }
 
-// Sayfa her açıldığında bu düzeltmeyi otomatik çalıştır
 if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", butonLinkleriniGuncelle);
+    document.addEventListener("DOMContentLoaded", updateAdminBackToClientLink);
 } else {
-    butonLinkleriniGuncelle();
+    updateAdminBackToClientLink();
 }
-// Not: Eski "disaridanSayaciGuncelle" DOM tarayıcı hack'i kaldırıldı.
-// Boş slot sayacı artık loadAvailableSlots/loadTodayCount tarafından (çalışma
-// saatleri filtresiyle) doğru biçimde hesaplanıyor; ayrıca her tıkta tüm DOM'u
-// taramaya gerek yok.
-// === YÖNETİM PANELİNDEN DOĞRU DÜKKANA DÖNÜŞ SİHİRBAZI ===
-document.addEventListener("DOMContentLoaded", () => {
-    const backLink = document.getElementById("backToClientLink");
-    if (backLink) {
-        // Mevcut URL'deki dükkan parametresini çekiyoruz (Örn: abc veya x-men)
-        const urlParams = new URLSearchParams(window.location.search);
-        const dukkanParam = urlParams.get('dukkan') || urlParams.get('randevu') || urlParams.get('shop');
-
-        if (dukkanParam) {
-            backLink.href = `randevu.html?dukkan=${encodeURIComponent(dukkanParam)}`;
-        } else {
-            backLink.href = "index.html";
-        }
-    }
-});
