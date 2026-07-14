@@ -1,5 +1,12 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getFirestore } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import {
+    AUTH_EMULATOR_HOST,
+    AUTH_EMULATOR_PORT,
+    shouldConnectAuthEmulator
+} from "./legacyAuthCompat.js";
+
+export { shouldConnectAuthEmulator, isLocalDevHost } from "./legacyAuthCompat.js";
 
 /** URL parametrelerini okur (müşteri randevu sayfası). */
 function getBookingUrlParams() {
@@ -122,6 +129,47 @@ export function hasFirebaseConfig() {
 
 export const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
+
+// =============================================================================
+// Firebase Auth — Phase 1 foundation (paralel; legacy login bozulmaz)
+// =============================================================================
+
+/** @deprecated shouldConnectAuthEmulator kullanın */
+export function isAuthEmulatorEnabled() {
+    return shouldConnectAuthEmulator();
+}
+
+let authInitPromise = null;
+
+/**
+ * Lazy Firebase Auth instance (CDN import). Idempotent — tek instance,
+ * connectAuthEmulator tek kez.
+ * @returns {Promise<import('firebase/auth').Auth>}
+ */
+export async function getAuthInstance() {
+    if (authInitPromise) return authInitPromise;
+
+    authInitPromise = (async () => {
+        const { getAuth, connectAuthEmulator } = await import(
+            "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js"
+        );
+        const auth = getAuth(app);
+
+        if (shouldConnectAuthEmulator()) {
+            try {
+                connectAuthEmulator(auth, `http://${AUTH_EMULATOR_HOST}:${AUTH_EMULATOR_PORT}`, {
+                    disableWarnings: true
+                });
+            } catch {
+                /* emulator zaten bağlı */
+            }
+        }
+
+        return auth;
+    })();
+
+    return authInitPromise;
+}
 
 // =============================================================================
 // App Check — MONITOR MODE (Faz 5C-C3)

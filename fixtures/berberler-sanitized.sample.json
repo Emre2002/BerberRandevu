@@ -1,0 +1,10 @@
+[
+  { "slug": "demo-berber-a", "username": "john" },
+  { "slug": "demo-berber-b", "username": "JOHN" },
+  { "slug": "demo-berber-c", "username": "IŞIK" },
+  { "slug": "demo-berber-d", "username": "İstanbul" },
+  { "slug": "demo-berber-e", "username": "  ahmet_01  " },
+  { "slug": "demo-berber-f", "username": "ab" },
+  { "slug": "demo-berber-g", "username": "" },
+  { "slug": "demo-berber-h", "username": "valid_user" }
+]

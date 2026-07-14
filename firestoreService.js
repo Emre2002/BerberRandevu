@@ -17,6 +17,7 @@ import {
     getWhatsAppBookingMessage
 } from "./linkService.js";
 import { getCustomerBlockMessage, calculatePublicBookingOpen } from "./publicBookingAccess.js";
+import { normalizeUsername as canonicalNormalizeUsername } from "./usernameNormalization.js";
 
 const BARBERS = "berberler";
 const PUBLIC_BARBERS = "publicBarbers";
@@ -110,8 +111,14 @@ export function normalizeSlug(raw) {
         .replace(/^-|-$/g, "");
 }
 
+/**
+ * @deprecated Canonical kaynak: usernameNormalization.js
+ * Geriye dönük uyum için delege eder; ayrı algoritma tutulmaz (H1).
+ * NOT: Canonical (NFKC + tr-TR) mevcut kayıtlardan farklı sonuç verebilir;
+ * eşleme için SECURITY_USERNAME_MIGRATION_PLAN.md gereklidir.
+ */
 export function normalizeUsername(raw) {
-    return raw.trim().toLowerCase();
+    return canonicalNormalizeUsername(raw);
 }
 
 export async function slugExists(slug) {
