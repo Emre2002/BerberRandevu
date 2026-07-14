@@ -126,14 +126,18 @@ Yalnızca kullanıcı kararı gerektiren konular. Uygulama kodu bu aşamada değ
 
 ---
 
-## Karar kayıt tablosu (doldurulacak)
+## Karar kayıt tablosu (Phase 0 — kesinleşen)
 
 | # | Konu | Seçim | Tarih |
 |---|------|-------|-------|
-| 1 | Username login | _bekliyor_ | |
-| 2 | Sentetik e-posta | _bekliyor_ | |
-| 3 | Password taşıma vs reset | _bekliyor_ | |
-| 4 | Public veri yüzeyi | _bekliyor_ | |
-| 5 | Super admin claim | _bekliyor_ | |
-| 6 | CF vs direct write | _bekliyor_ | |
-| 7 | Owner-only vs employee | _bekliyor_ | |
+| 1 | Username login | **Evet** — UX korunur | 2026-07-15 |
+| 2 | Sentetik e-posta Auth eşlemesi | **Evet** — arka planda internal e-posta | 2026-07-15 |
+| 3 | Password taşıma vs reset | **Zorunlu kontrollü parola yenileme/onboarding** — düz metin taşınmaz | 2026-07-15 |
+| 4 | Public veri yüzeyi | **Yalnız `publicBarbers`** | 2026-07-15 |
+| 5 | Super admin | **Firebase Auth custom claim `super_admin: true`** (Admin SDK) | 2026-07-15 |
+| 6 | CF vs direct write | Public appointment **yalnız `createAppointment` CF**; diğerleri plan fazlarında (bkz. SECURITY_MIGRATION_PLAN) | 2026-07-15 |
+| 7 | Owner-only vs employee | **Yalnız owner** — employee rolü yok | 2026-07-15 |
+
+---
+
+## Karar kayıt tablosu (önceki — arşiv)

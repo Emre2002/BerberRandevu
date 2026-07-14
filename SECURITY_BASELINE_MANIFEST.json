@@ -1,0 +1,65 @@
+{
+  "createdAt": "2026-07-15T00:00:00+03:00",
+  "git": {
+    "branch": "security/firebase-auth-migration",
+    "headSha": "d743e02068c501bc5d1ee17c45ffba3770a889d3",
+    "workingTree": "clean",
+    "remote": "origin https://github.com/Emre2002/BerberRandevu"
+  },
+  "firebase": {
+    "projectId": "berberrandevu-20a3e",
+    "rulesPath": "firestore.rules",
+    "indexesPath": "firestore.indexes.json",
+    "functionsSource": "functions",
+    "functionsRuntime": "node20"
+  },
+  "runtime": {
+    "node": "20.20.1",
+    "npm": "10.8.2",
+    "firebaseCli": "15.23.0",
+    "java": "Temurin 21.0.11 LTS"
+  },
+  "fileHashesSha256": {
+    "firestore.rules": "4d12961fcdabc2e9bc3239b35e0f57e26c78c11f41ff5e4d483222dcee7ef38f",
+    "firebase.json": "52fe19f1fd193517447766007754babff1bfedc92ed3addc3ddafe5a925b3f8c",
+    "firestore.indexes.json": "c9db33026c4ec1fba42b41747cc33b093586639130f91287f49790f5b48fe366",
+    "functions/package.json": "04c731ad5337ee6c1e6552a1d17ddd58508e124de7aa4891177260f5a0fb27e9",
+    "functions/package-lock.json": "a7539e3b515397d8bd95e91837c362bcfc315a24ee4c1cf7e6516d84e595ef7d",
+    "functions/index.js": "ff5ebbd78548556f10f40f530c0de6df7b96f48531a53951d30901911146b4a0",
+    ".firebaserc": "03d686ac5ce72d942a836a5a6f0a34fa8cc2616f86e68927143d48775ec93bf5"
+  },
+  "authBaselineFiles": {
+    "sessionAuth.js": "956748c956e6fabae41e1d35f24d37723b69a3ff16caa92d7229d2a8be8b3bc7",
+    "admin-auth.js": "79b4c7f1e575ff8286046d1c49563af630cdb28508c21a79f24c25142cfdad60",
+    "giris.js": "69cece73f8ff4f8c09f6a094bae39dfa4bb2449b4ee437055b11a7bcdd94843a",
+    "barber-login.js": "0f44845105446ec99687c413bba77de95dc71ce093d1349198c76f90e4b85c41",
+    "super-admin.js": "1dc4d360159eb96c932e911b3c5a2a19dc19593a246268454e13ba9d5bd48915",
+    "firestoreService.js": "df3eaf3b29ff549ef69c1af2cc0dcf8a340e8e1598a14aa9b07f97a925363ddd",
+    "appointmentService.js": "dac1c42bf0a7ad8b03ee24e67cf52f85b11e7b0188d375f58c8059af20d40336",
+    "firebase-config.js": "349d2f2b516efaecc52108bdcc32045cdd5ea76957bcffdd37066258243306be"
+  },
+  "superAdminHardcodedAuth": {
+    "file": "superAdminAuth.js",
+    "sha256": "e6aec6ced7bfd9948852f5aac5079580125cd4a312fee76591364822200bf34e"
+  },
+  "plaintextPasswordFlow": {
+    "files": [
+      { "path": "firestoreService.js", "sha256": "df3eaf3b29ff549ef69c1af2cc0dcf8a340e8e1598a14aa9b07f97a925363ddd" },
+      { "path": "giris.js", "sha256": "69cece73f8ff4f8c09f6a094bae39dfa4bb2449b4ee437055b11a7bcdd94843a" },
+      { "path": "barber-login.js", "sha256": "0f44845105446ec99687c413bba77de95dc71ce093d1349198c76f90e4b85c41" }
+    ]
+  },
+  "createAppointmentFunction": {
+    "file": "functions/index.js",
+    "sha256": "ff5ebbd78548556f10f40f530c0de6df7b96f48531a53951d30901911146b4a0"
+  },
+  "frontendDeployment": {
+    "method": "vercel",
+    "evidenceFile": "linkService.js",
+    "productionBaseUrl": "https://berberv1.vercel.app"
+  },
+  "productionBackup": {
+    "status": "not_executed",
+    "runbook": "SECURITY_BACKUP_RUNBOOK.md"
+  }
+}
