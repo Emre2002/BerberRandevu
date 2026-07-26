@@ -1,9 +1,12 @@
+import { bootstrapPassiveAuthFoundation } from "./authService.js";
 import { resolveBarberLogin } from "./firestoreService.js";
 import {
     loginBarberSession,
     isBarberSessionValid,
     getLoggedInBarberSlug
 } from "./sessionAuth.js";
+
+bootstrapPassiveAuthFoundation();
 
 const LOGIN_ERROR = "Kullanıcı adı veya şifre hatalı.";
 

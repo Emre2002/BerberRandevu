@@ -1,3 +1,4 @@
+import { bootstrapPassiveAuthFoundation } from "./authService.js";
 import { fetchBarber } from "./firestoreService.js";
 import {
     logoutBarberSession,
@@ -6,6 +7,8 @@ import {
     requireBarberSession,
     getLoggedInBarberSlug
 } from "./sessionAuth.js";
+
+bootstrapPassiveAuthFoundation();
 
 const urlSlug = getBarberSlugFromUrl();
 const fromSuperAdminParam = new URLSearchParams(window.location.search).get("fromSuperAdmin") === "true";

@@ -1,6 +1,6 @@
 import { getAuthInstance } from "./firebase-config.js";
 import { fetchMembershipForUid } from "./membershipService.js";
-import { detectLegacyAuthMode } from "./legacyAuthCompat.js";
+import { detectLegacyAuthMode, isLocalDevHost } from "./legacyAuthCompat.js";
 import { createAuthStateMachine } from "./authStateMachine.js";
 
 let machine = null;
@@ -60,6 +60,20 @@ export async function ensureAuthFoundationInitialized() {
     });
 
     return initPromise;
+}
+
+/**
+ * Pasif Auth foundation bootstrap — frontend entry point'lerden çağrılır.
+ * Legacy login/guard akışını değiştirmez; init hatası uygulamayı çökertmez.
+ */
+export function bootstrapPassiveAuthFoundation() {
+    if (typeof window === "undefined") return;
+
+    ensureAuthFoundationInitialized().catch(() => {
+        if (isLocalDevHost(window.location?.hostname)) {
+            console.info("[auth-bootstrap] passive init unavailable (legacy login unaffected)");
+        }
+    });
 }
 
 /**

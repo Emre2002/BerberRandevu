@@ -1,3 +1,4 @@
+import { bootstrapPassiveAuthFoundation } from "./authService.js";
 import {
     isSuperAdminLoggedIn,
     loginSuperAdmin,
@@ -7,6 +8,8 @@ import { validateSuperAdminLogin } from "./superAdminAuth.js";
 import { mountSuperAdminPanel, unmountSuperAdminPanel } from "./super-admin-panel.js";
 import { migrateVisitDates } from "./migrateVisitDates.js";
 import { syncAllPublicBarbersForMigration } from "./firestoreService.js";
+
+bootstrapPassiveAuthFoundation();
 
 const loginScreen = document.getElementById("saLoginScreen");
 const mountEl = document.getElementById("saAppMount");
