@@ -39,6 +39,11 @@ export function shouldConnectAuthEmulator(ctx = {}) {
     return params.get("authEmulator") === "1" || params.get("useEmulators") === "1";
 }
 
+/** Development-only Firebase Auth sign-in yolu (localhost + emulator flag). */
+export function shouldUseEmulatorAuthLogin(ctx) {
+    return shouldConnectAuthEmulator(ctx);
+}
+
 export function detectLegacyAuthMode() {
     if (typeof window === "undefined") {
         return { authMode: AUTH_MODE.NONE, source: null };

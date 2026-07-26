@@ -5,6 +5,12 @@ import {
     isBarberSessionValid,
     getLoggedInBarberSlug
 } from "./sessionAuth.js";
+import {
+    shouldUseEmulatorAuthLogin,
+    signInWithEmulatorAuth,
+    EMULATOR_AUTH_LOGIN_ERROR,
+    EMULATOR_AUTH_UNAVAILABLE_ERROR
+} from "./emulatorAuthLogin.js";
 
 bootstrapPassiveAuthFoundation();
 
@@ -34,15 +40,34 @@ form?.addEventListener("submit", async (e) => {
     }
 
     try {
+        if (shouldUseEmulatorAuthLogin()) {
+            const { businessId } = await signInWithEmulatorAuth(username, password);
+            loginBarberSession({
+                slug: businessId,
+                barberName: businessId
+            });
+            window.location.href = `admin.html?dukkan=${encodeURIComponent(businessId)}`;
+            return;
+        }
+
         const { slug, barber } = await resolveBarberLogin(username, password);
         loginBarberSession({
             slug,
             barberName: barber.name || barber.isim || slug
         });
         window.location.href = `admin.html?dukkan=${encodeURIComponent(slug)}`;
-    } catch {
+    } catch (err) {
         if (errorEl) {
-            errorEl.textContent = LOGIN_ERROR;
+            if (shouldUseEmulatorAuthLogin()) {
+                const msg =
+                    err?.code === "functions/unavailable" ||
+                    err?.message === "emulator_auth_callable_unavailable"
+                        ? EMULATOR_AUTH_UNAVAILABLE_ERROR
+                        : EMULATOR_AUTH_LOGIN_ERROR;
+                errorEl.textContent = msg;
+            } else {
+                errorEl.textContent = LOGIN_ERROR;
+            }
             errorEl.hidden = false;
         }
     } finally {

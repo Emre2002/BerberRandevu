@@ -497,3 +497,19 @@ exports.createAppointment = onCall({ cors: true }, async (request) => {
 
     return { appointmentId: appointmentRef.id, message: "ok" };
 });
+
+/**
+ * Emulator-only: username → Auth e-posta tanımlayıcısı (sentetik format yalnız sunucuda).
+ * Yalnız Functions Emulator runtime'da export edilir — production deploy listesine girmez.
+ * Handler içinde FUNCTIONS_EMULATOR fail-closed kontrolü ikinci savunma katmanıdır.
+ */
+if (process.env.FUNCTIONS_EMULATOR === "true") {
+    const {
+        handleResolveAuthIdentifierForEmulator
+    } = require("./lib/resolveAuthIdentifierCallable");
+
+    exports.resolveAuthIdentifierForEmulator = onCall(
+        { cors: true },
+        handleResolveAuthIdentifierForEmulator
+    );
+}

@@ -43,6 +43,7 @@ export function isCfBookingQueryEnabled() {
 }
 
 let createAppointmentCallablePromise = null;
+let resolveAuthIdentifierCallablePromise = null;
 
 /**
  * Callable createAppointment — lazy import.
@@ -72,6 +73,32 @@ export async function getCreateAppointmentCallable({ forceClient = false } = {})
     }
 
     return createAppointmentCallablePromise;
+}
+
+/**
+ * Emulator-only username resolver callable — lazy import.
+ * Yalnız localhost + authEmulator flag ile kullanılabilir.
+ * @returns {Promise<import('firebase/functions').HttpsCallable|null>}
+ */
+export async function getResolveAuthIdentifierCallable() {
+    if (!shouldConnectAuthEmulator()) return null;
+
+    if (!resolveAuthIdentifierCallablePromise) {
+        resolveAuthIdentifierCallablePromise = (async () => {
+            const { getFunctions, httpsCallable, connectFunctionsEmulator } = await import(
+                "https://www.gstatic.com/firebasejs/10.7.1/firebase-functions.js"
+            );
+            const functions = getFunctions(app);
+            try {
+                connectFunctionsEmulator(functions, "127.0.0.1", 5001);
+            } catch {
+                /* emulator zaten bağlı */
+            }
+            return httpsCallable(functions, "resolveAuthIdentifierForEmulator");
+        })();
+    }
+
+    return resolveAuthIdentifierCallablePromise;
 }
 
 export const FIREBASE_CONFIG_STORAGE_KEY = "berberFirebaseConfig";

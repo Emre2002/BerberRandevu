@@ -1,0 +1,11 @@
+{
+  "description": "Yalnız Firebase Auth Emulator geliştirme hesapları. Production verisi değildir.",
+  "syntheticEmailDomain": "users.berberrandevu.internal",
+  "users": [
+    {
+      "username": "emulator_owner",
+      "businessId": "shop-emulator-a",
+      "devPasswordHint": "Emulator-only test password — Auth Emulator UI veya import ile oluşturun"
+    }
+  ]
+}
