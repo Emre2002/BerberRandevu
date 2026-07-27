@@ -1,5 +1,37 @@
 # SECURITY_RULES_TEST_PLAN.md
 
+## Phase 4A — uygulanan altyapı (2026-07-27)
+
+| Bileşen | Konum |
+|---------|--------|
+| Test kütüphanesi | `@firebase/rules-unit-testing` (root devDependency) |
+| Production rules test config | `firebase.rules-test.json` (port 8081/9100) |
+| Phase 3 emulator config | `firebase.emulator.json` (değişmedi) |
+| Production deploy config | `firebase.json` (değişmedi) |
+| Sentetik project ID | `berberrandevu-rules-test` |
+| Fail-closed guard | `tests/firestore-rules/guards.mjs` |
+| Fixture seed | `tests/firestore-rules/fixtures.mjs` (`withSecurityRulesDisabled`) |
+| Runner | `tests/firestore-rules/run.mjs` |
+
+### Komutlar
+
+```bash
+npm run test:regression          # 196 mevcut test
+npm run test:rules:config        # config ayrımı (5 test)
+npm run test:rules:current       # mevcut davranış karakterizasyonu (20 test)
+npm run test:rules:target        # hedef model (11 beklenen FAIL)
+npm run test:rules               # config + current
+```
+
+### Test kategorileri
+
+1. **current-rules-characterization** — mevcut `firestore.rules` davranışını ölçer; yeşil = karakterizasyon doğru
+2. **target-security-requirements** — hedef deny-by-default; kırmızı = bilinen GAP (`FIRESTORE_RULES_GAP_REPORT.md`)
+
+---
+
+## Önceki plan (hedef senaryolar)
+
 Firebase Emulator Suite (`firebase.json`: functions 5001, firestore 8080) için.
 Gerçek koleksiyon adları kullanılır. Customer Auth rolü yoktur.
 
