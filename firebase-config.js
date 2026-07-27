@@ -1,12 +1,19 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getFirestore } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { getFirestore, connectFirestoreEmulator } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import {
     AUTH_EMULATOR_HOST,
     AUTH_EMULATOR_PORT,
-    shouldConnectAuthEmulator
+    FIRESTORE_EMULATOR_HOST,
+    FIRESTORE_EMULATOR_PORT,
+    shouldConnectAuthEmulator,
+    shouldConnectFirestoreEmulator
 } from "./legacyAuthCompat.js";
 
-export { shouldConnectAuthEmulator, isLocalDevHost } from "./legacyAuthCompat.js";
+export {
+    shouldConnectAuthEmulator,
+    shouldConnectFirestoreEmulator,
+    isLocalDevHost
+} from "./legacyAuthCompat.js";
 
 /** URL parametrelerini okur (müşteri randevu sayfası). */
 function getBookingUrlParams() {
@@ -156,6 +163,14 @@ export function hasFirebaseConfig() {
 
 export const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
+
+if (typeof window !== "undefined" && shouldConnectFirestoreEmulator()) {
+    try {
+        connectFirestoreEmulator(db, FIRESTORE_EMULATOR_HOST, FIRESTORE_EMULATOR_PORT);
+    } catch {
+        /* emulator zaten bağlı */
+    }
+}
 
 // =============================================================================
 // Firebase Auth — Phase 1 foundation (paralel; legacy login bozulmaz)

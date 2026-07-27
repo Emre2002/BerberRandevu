@@ -2,6 +2,8 @@ import { isBarberSessionValid, isSuperAdminLoggedIn } from "./sessionAuth.js";
 
 export const AUTH_EMULATOR_HOST = "127.0.0.1";
 export const AUTH_EMULATOR_PORT = 9099;
+export const FIRESTORE_EMULATOR_HOST = "127.0.0.1";
+export const FIRESTORE_EMULATOR_PORT = 8080;
 
 /**
  * Geçiş durumu — yetkilendirme değildir.
@@ -41,6 +43,11 @@ export function shouldConnectAuthEmulator(ctx = {}) {
 
 /** Development-only Firebase Auth sign-in yolu (localhost + emulator flag). */
 export function shouldUseEmulatorAuthLogin(ctx) {
+    return shouldConnectAuthEmulator(ctx);
+}
+
+/** Firestore Emulator: Auth ile aynı localhost + flag gating. */
+export function shouldConnectFirestoreEmulator(ctx) {
     return shouldConnectAuthEmulator(ctx);
 }
 
