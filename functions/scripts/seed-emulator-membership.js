@@ -132,6 +132,71 @@ function buildMembershipDoc(uid, businessId) {
 }
 
 /**
+ * Fixture'tan sentetik private berberler/{businessId} belgesi — spread yok.
+ * @param {object} entry
+ * @param {string} businessId
+ */
+function buildPrivateBarberSeedDoc(entry, businessId) {
+    const pb = entry?.privateBarber;
+    if (!pb || typeof pb !== "object") {
+        const err = new Error("missing_private_barber_fixture");
+        err.code = "missing_private_barber_fixture";
+        throw err;
+    }
+
+    const doc = {
+        slug: businessId,
+        name: String(pb.name || "").trim(),
+        address: String(pb.address || "").trim(),
+        city: String(pb.city || "").trim(),
+        district: String(pb.district || "").trim(),
+        neighborhood: String(pb.neighborhood || "").trim(),
+        addressDetail: String(pb.addressDetail || "").trim(),
+        openHour: String(pb.openHour || "09:00").trim(),
+        closeHour: String(pb.closeHour || "18:00").trim(),
+        status: pb.status || "active",
+        selectedServices: Array.isArray(pb.selectedServices)
+            ? pb.selectedServices.filter((s) => typeof s === "string")
+            : [],
+        password: String(pb.password || "synthetic-emulator-private-password"),
+        username: String(entry.username || pb.username || "").trim(),
+        telegramChatId: String(pb.telegramChatId || "emulator-telegram-sentinel"),
+        subscriptionStatus: pb.subscriptionStatus || "active"
+    };
+
+    return doc;
+}
+
+/**
+ * @param {{ doc: Function, get: Function, set: Function }} firestore
+ * @param {string} businessId
+ * @param {object} privateDoc
+ */
+async function seedPrivateBarberDoc(firestore, businessId, privateDoc) {
+    const ref = firestore.doc("berberler", businessId);
+    const existingSnap = await firestore.get(ref);
+
+    if (!existingSnap.exists) {
+        await firestore.set(ref, {
+            ...privateDoc,
+            createdAt: new Date(),
+            updatedAt: new Date()
+        });
+        return "created";
+    }
+
+    await firestore.set(
+        ref,
+        {
+            ...privateDoc,
+            updatedAt: new Date()
+        },
+        { merge: true }
+    );
+    return "updated";
+}
+
+/**
  * @param {unknown} doc
  * @param {string} uid
  */
@@ -217,11 +282,15 @@ async function runEmulatorSeed({ args, password, auth, firestore, loadFixture = 
             });
         }
 
+        const privateDoc = buildPrivateBarberSeedDoc(entry, businessId);
+        const privateBarberStatus = await seedPrivateBarberDoc(firestore, businessId, privateDoc);
+
         results.push({
             username: validated.normalized,
             businessId,
             uid,
-            authEmailDomain: domain
+            authEmailDomain: domain,
+            privateBarberStatus
         });
     }
 
@@ -273,7 +342,8 @@ async function main() {
             projectId: result.projectId,
             seededCount: result.seeded.length,
             usernames: result.seeded.map((r) => r.username),
-            businessIds: result.seeded.map((r) => r.businessId)
+            businessIds: result.seeded.map((r) => r.businessId),
+            privateBarberSlugs: result.seeded.map((r) => r.businessId)
         })
     );
 }
@@ -294,6 +364,8 @@ module.exports = {
     loadEmulatorFixture,
     buildSyntheticEmail,
     buildMembershipDoc,
+    buildPrivateBarberSeedDoc,
+    seedPrivateBarberDoc,
     membershipDocMatchesExpected,
     runEmulatorSeed
 };

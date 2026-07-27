@@ -18,59 +18,31 @@ import {
 } from "./linkService.js";
 import { getCustomerBlockMessage, calculatePublicBookingOpen } from "./publicBookingAccess.js";
 import { normalizeUsername as canonicalNormalizeUsername } from "./usernameNormalization.js";
+import { buildPublicBarberProjection } from "./publicBarberProjection.js";
 
 const BARBERS = "berberler";
 const PUBLIC_BARBERS = "publicBarbers";
-
-function trimStr(value) {
-    return typeof value === "string" ? value.trim() : "";
-}
 
 /**
  * Yalnızca public alanları seçer; username/password/telegram/abonelik alanlarını asla dahil etmez.
  */
 export function buildPublicBarberData(barber, slug) {
-    const resolvedSlug = slug || barber?.slug || "";
-    const payload = {
-        slug: resolvedSlug,
-        name: trimStr(barber?.name),
-        address: trimStr(barber?.address),
-        city: trimStr(barber?.city),
-        district: trimStr(barber?.district),
-        neighborhood: trimStr(barber?.neighborhood),
-        addressDetail: trimStr(barber?.addressDetail),
-        phone: trimStr(barber?.phone),
-        whatsapp: trimStr(barber?.whatsapp),
-        openHour: trimStr(barber?.openHour || barber?.openingHour),
-        closeHour: trimStr(barber?.closeHour || barber?.closingHour),
-        logoUrl: trimStr(barber?.logoUrl),
-        coverUrl: trimStr(barber?.coverUrl),
-        mapsLink: trimStr(barber?.mapsLink),
-        status: barber?.status || "active",
+    return buildPublicBarberProjection(barber, slug, {
         bookingOpen: calculatePublicBookingOpen(barber)
-    };
-
-    if (Array.isArray(barber?.selectedServices) && barber.selectedServices.length > 0) {
-        payload.selectedServices = barber.selectedServices.filter((s) => typeof s === "string");
-    }
-
-    return payload;
+    });
 }
 
-/** Müşteri randevu sayfası için public dükkan bilgisi. Yoksa legacy berberler fallback (uyarı ile). */
+/** Müşteri randevu sayfası — yalnız publicBarbers/{slug}; private fallback yok. */
 export async function fetchPublicBarber(slug) {
     const normalized = normalizeSlug(slug) || String(slug || "").trim();
     if (!normalized) return null;
 
     const pubSnap = await getDoc(doc(db, PUBLIC_BARBERS, normalized));
-    if (pubSnap.exists()) {
-        return { slug: pubSnap.id, ...pubSnap.data() };
+    if (!pubSnap.exists()) {
+        return null;
     }
 
-    console.warn(`publicBarbers/${normalized} bulunamadı. Public Mirror Sync çalıştırılmalı.`);
-    const legacy = await fetchBarber(normalized);
-    if (!legacy) return null;
-    return buildPublicBarberData(legacy, normalized);
+    return { slug: pubSnap.id, ...pubSnap.data() };
 }
 
 /** publicBarbers/{slug} mirror — yalnızca public alanlar yazılır. */

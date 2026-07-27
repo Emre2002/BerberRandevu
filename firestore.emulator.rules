@@ -4,22 +4,53 @@ rules_version = '2';
 // EMULATOR DEV ONLY — Production'a deploy edilmez.
 // Yüklenir: firebase.emulator.json → top-level firestore.rules
 // Phase 3: businessMemberships/{uid} owner get (client write kapalı).
+// Phase 4B2 smoke: publicBarbers public get; berberler profil public get kapalı.
 // =============================================================================
 
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function membershipPath() {
+      return /databases/$(database)/documents/businessMemberships/$(request.auth.uid);
+    }
+
+    function hasActiveOwnerMembership() {
+      return isSignedIn()
+        && exists(membershipPath())
+        && get(membershipPath()).data.uid == request.auth.uid
+        && get(membershipPath()).data.role == 'owner'
+        && get(membershipPath()).data.status == 'active'
+        && get(membershipPath()).data.businessId is string
+        && get(membershipPath()).data.businessId.size() > 0;
+    }
+
+    function ownsBusiness(businessId) {
+      return hasActiveOwnerMembership()
+        && get(membershipPath()).data.businessId == businessId;
+    }
+
     match /businessMemberships/{membershipUid} {
       allow get: if request.auth != null && request.auth.uid == membershipUid;
       allow list, create, update, delete: if false;
     }
 
-    // Legacy admin paneli geliştirme uyumu (membership dışı koleksiyonlar)
+    match /publicBarbers/{businessId} {
+      allow get: if true;
+      allow list, create, update, delete: if false;
+    }
+
     match /berberler/{slug} {
-      allow read: if true;
-      allow write: if true;
+      allow get: if ownsBusiness(slug);
+      allow list, create, delete: if false;
+      allow update: if ownsBusiness(slug);
 
       match /blockedSlots/{docId} {
-        allow read, write: if true;
+        allow get, list: if true;
+        allow create, update, delete: if ownsBusiness(slug);
       }
 
       match /appointments/{docId} {

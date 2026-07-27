@@ -17,16 +17,27 @@
 
 ```bash
 npm run test:regression          # 196 mevcut test
-npm run test:rules:config        # config ayrımı (5 test)
+npm run test:rules:config        # config ayrımı (9 test)
 npm run test:rules:current       # mevcut davranış karakterizasyonu (20 test)
-npm run test:rules:target        # hedef model (11 beklenen FAIL)
-npm run test:rules               # config + current
+npm run test:rules:target        # hedef model vs production (11 beklenen FAIL)
+npm run test:rules:candidate     # Phase 4B aday rules (36 test)
+npm run test:rules               # config + current + candidate (target dahil değil)
 ```
 
-### Test kategorileri
+## Phase 4B1 — candidate shadow rules (2026-07-27)
 
-1. **current-rules-characterization** — mevcut `firestore.rules` davranışını ölçer; yeşil = karakterizasyon doğru
-2. **target-security-requirements** — hedef deny-by-default; kırmızı = bilinen GAP (`FIRESTORE_RULES_GAP_REPORT.md`)
+| Bileşen | Konum |
+|---------|--------|
+| Candidate rules | `firestore.phase4b.rules` |
+| Candidate test config | `firebase.rules-phase4b.json` (port 8082/9101) |
+| Candidate tests | `tests/firestore-rules/candidate/candidate-security.test.mjs` |
+| Compatibility | `FIRESTORE_PHASE4B_COMPATIBILITY_REPORT.md` |
+
+### Test kategorileri (güncel)
+
+1. **current-rules-characterization** — production `firestore.rules`
+2. **target-security-requirements** — production vs hedef (gap raporu)
+3. **candidate-security** — `firestore.phase4b.rules` (tam geçmeli)
 
 ---
 

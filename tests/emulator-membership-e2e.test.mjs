@@ -127,13 +127,17 @@ describe("seed emulator — idempotency & membership", () => {
 
         const store = new Map();
         const firestore = {
-            doc: (_col, id) => ({ id }),
+            doc: (col, id) => ({ col, id, key: `${col}/${id}` }),
             get: async (ref) => ({
-                exists: store.has(ref.id),
-                data: () => store.get(ref.id)
+                exists: store.has(ref.key),
+                data: () => store.get(ref.key)
             }),
-            set: async (ref, data) => {
-                store.set(ref.id, { ...data });
+            set: async (ref, data, opts) => {
+                if (opts?.merge && store.has(ref.key)) {
+                    store.set(ref.key, { ...store.get(ref.key), ...data });
+                } else {
+                    store.set(ref.key, { ...data });
+                }
             }
         };
 
