@@ -46,7 +46,7 @@ form?.addEventListener("submit", async (e) => {
                 slug: businessId,
                 barberName: businessId
             });
-            window.location.href = `admin.html?dukkan=${encodeURIComponent(businessId)}`;
+            window.location.href = `admin.html?dukkan=${encodeURIComponent(businessId)}&authEmulator=1`;
             return;
         }
 

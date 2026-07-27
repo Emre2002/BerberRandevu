@@ -1,3 +1,4 @@
+import { ensureAuthFoundationInitialized } from "./authService.js";
 import { getAuthInstance, getResolveAuthIdentifierCallable } from "./firebase-config.js";
 import { shouldUseEmulatorAuthLogin } from "./legacyAuthCompat.js";
 
@@ -35,12 +36,19 @@ export async function signInWithEmulatorAuth(username, password) {
         throw new Error("emulator_auth_invalid_response");
     }
 
+    // Persistence + emulator listener sign-in'den ÖNCE kurulmalı; aksi halde oturum kalıcı olmaz.
+    await ensureAuthFoundationInitialized();
+
     const auth = await getAuthInstance();
     const { signInWithEmailAndPassword } = await import(
         "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js"
     );
 
     await signInWithEmailAndPassword(auth, authEmail, password);
+
+    if (!auth.currentUser) {
+        throw new Error("emulator_auth_signin_failed");
+    }
 
     return { businessId };
 }

@@ -12,10 +12,13 @@ Phase 3 — geliştirme ortamında owner membership akışını doğrulama. **Pr
 
 ```bash
 cd functions
-npm run serve
+npm run serve -- --project berberrandevu-20a3e
 ```
 
-Beklenen portlar (`firebase.json`):
+Bu komut `firebase.emulator.json` kullanır (production `firebase.json` değil).
+Rules: top-level `firestore.rules` → `firestore.emulator.rules`
+
+Beklenen portlar (`firebase.emulator.json`):
 
 | Servis | Host | Port |
 |--------|------|------|
@@ -66,6 +69,10 @@ http://127.0.0.1:5500/giris.html?authEmulator=1
 
 Alternatif flag: `?useEmulators=1`
 
+**Origin kuralı (kritik):** Giriş, redirect ve gözlem sayfasında **aynı hostname** kullanın.
+`127.0.0.1` ile `localhost` farklı origin sayılır; Auth persistence paylaşılmaz.
+Tüm adımlarda yalnız `http://127.0.0.1:5500` kullanın.
+
 ## 5. Sentetik kullanıcı adı
 
 Fixture: `fixtures/auth-emulator-users.json`
@@ -114,6 +121,9 @@ Kalıcı export/import kullandıysanız ilgili emulator export klasörünü sili
 | `functions/unavailable` | Functions emulator kapalı | `npm run serve` |
 | `Emulator giriş servisi kullanılamıyor` | Flag eksik | URL'ye `?authEmulator=1` ekleyin |
 | `authenticated_without_membership` | Membership seed yapılmadı | Seed aracını çalıştırın |
+| `unauthenticated` (giriş sonrası) | Farklı origin (`localhost` vs `127.0.0.1`) veya persistence öncesi sign-in | Yalnız `127.0.0.1` kullanın; çıkış yapıp tekrar giriş yapın |
+| `guard.state: error` + membership | Firestore emulator yanlış rules yüklüyor | Emulator'ı `npm run serve` ile yeniden başlatın (`firebase.emulator.json`) |
+| `legacy_only` observer'da | Firebase Auth yok ama sessionStorage legacy oturum var | `authEmulator=1` ile giriş yapın; observer legacy'i owner saymaz |
 | Seed `blocked: auth_emulator_missing_host` | Env eksik | `FIREBASE_AUTH_EMULATOR_HOST` ayarlayın |
 | Seed `blocked: missing EMULATOR_OWNER_PASSWORD` | Şifre env yok | Yerel env değişkeni set edin |
 | Firestore okuma production'a gider | Emulator flag kapalı | `?authEmulator=1` + localhost kullanın |

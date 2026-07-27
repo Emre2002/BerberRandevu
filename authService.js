@@ -6,6 +6,7 @@ import { createAuthStateMachine } from "./authStateMachine.js";
 let machine = null;
 let initPromise = null;
 let unsubscribeAuth = null;
+let authStateKnown = false;
 
 /** @returns {ReturnType<typeof createAuthStateMachine>} */
 function getMachine() {
@@ -50,10 +51,12 @@ export async function ensureAuthFoundationInitialized() {
         await setPersistence(auth, browserLocalPersistence);
 
         unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+            authStateKnown = true;
             m.handleAuthUser(user);
         });
     })().catch((err) => {
         initPromise = null;
+        authStateKnown = true;
         // Persistence/listener kurulamadı → owner yetkisi verilmez.
         m.handleAuthUser(null);
         throw err;
@@ -115,6 +118,15 @@ export function teardownAuthFoundation() {
     unsubscribeAuth = null;
     initPromise = null;
     machine = null;
+    authStateKnown = false;
+}
+
+/**
+ * İlk onAuthStateChanged callback'i alındı mı (persisted session restore dahil).
+ * @returns {boolean}
+ */
+export function isAuthStateKnown() {
+    return authStateKnown;
 }
 
 /**

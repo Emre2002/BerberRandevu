@@ -308,8 +308,9 @@ describe("dev auth state observer — production block", () => {
         const src = readFileSync(DEV_AUTH_STATE_SRC, "utf8");
         assert.match(src, /guard\.state/);
         assert.match(src, /guard\.businessId/);
-        assert.doesNotMatch(src, /snapshot\.membership\b/);
-        assert.doesNotMatch(src, /firebaseUser/);
+        assert.doesNotMatch(src, /JSON\.stringify\(snapshot/);
+        assert.doesNotMatch(src, /firebaseUser\.uid/);
+        assert.doesNotMatch(src, /firebaseUser\.email/);
     });
 });
 

@@ -1,0 +1,58 @@
+rules_version = '2';
+
+// =============================================================================
+// EMULATOR DEV ONLY — Production'a deploy edilmez.
+// Yüklenir: firebase.emulator.json → top-level firestore.rules
+// Phase 3: businessMemberships/{uid} owner get (client write kapalı).
+// =============================================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /businessMemberships/{membershipUid} {
+      allow get: if request.auth != null && request.auth.uid == membershipUid;
+      allow list, create, update, delete: if false;
+    }
+
+    // Legacy admin paneli geliştirme uyumu (membership dışı koleksiyonlar)
+    match /berberler/{slug} {
+      allow read: if true;
+      allow write: if true;
+
+      match /blockedSlots/{docId} {
+        allow read, write: if true;
+      }
+
+      match /appointments/{docId} {
+        allow read, write: if true;
+      }
+    }
+
+    match /appointments/{docId} {
+      allow read, write: if true;
+    }
+
+    match /payments/{docId} {
+      allow read, write: if true;
+    }
+
+    match /customers/{docId} {
+      allow read, write: if true;
+    }
+
+    match /notifications/{docId} {
+      allow read, write: if true;
+    }
+
+    match /campaigns/{docId} {
+      allow read, write: if true;
+    }
+
+    match /deletedAppointments/{docId} {
+      allow read, write: if true;
+    }
+
+    match /demo_talepleri/{docId} {
+      allow read, write: if true;
+    }
+  }
+}
