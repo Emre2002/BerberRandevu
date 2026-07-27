@@ -7,7 +7,8 @@
     "test:rules:config": "node tests/firestore-rules/run.mjs config",
     "test:rules:current": "node tests/firestore-rules/run.mjs current",
     "test:rules:target": "node tests/firestore-rules/run.mjs target",
-    "test:rules": "npm run test:rules:config && npm run test:rules:current"
+    "test:rules:candidate": "node tests/firestore-rules/run.mjs candidate",
+    "test:rules": "npm run test:rules:config && npm run test:rules:current && npm run test:rules:candidate"
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^3.0.4"

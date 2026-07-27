@@ -34,3 +34,27 @@ describe("Phase 4A rules test config separation", () => {
         assert.match(guards, /berberrandevu-20a3e/);
     });
 });
+
+describe("Phase 4B1 candidate rules config separation", () => {
+    const phase4bCfg = JSON.parse(readFileSync(resolve(ROOT, "firebase.rules-phase4b.json"), "utf8"));
+    const prodRules = readFileSync(resolve(ROOT, "firestore.rules"), "utf8");
+    const candidateRules = readFileSync(resolve(ROOT, "firestore.phase4b.rules"), "utf8");
+
+    it("firebase.rules-phase4b.json firestore.phase4b.rules kullanır", () => {
+        assert.equal(phase4bCfg.firestore.rules, "firestore.phase4b.rules");
+    });
+
+    it("production firestore.rules değişmemiş (businessMemberships yok)", () => {
+        assert.doesNotMatch(prodRules, /businessMemberships/);
+    });
+
+    it("candidate rules businessMemberships ve default deny içerir", () => {
+        assert.match(candidateRules, /match \/businessMemberships\/\{membershipUid\}/);
+        assert.match(candidateRules, /match \/\{document=\*\*\}/);
+    });
+
+    it("candidate config ayrı emulator portları kullanır", () => {
+        const testCfg = JSON.parse(readFileSync(resolve(ROOT, "firebase.rules-test.json"), "utf8"));
+        assert.notEqual(phase4bCfg.emulators.firestore.port, testCfg.emulators.firestore.port);
+    });
+});

@@ -1,4 +1,4 @@
-/** Sentetik Phase 4A fixture kimlikleri — production verisi değil. */
+/** Sentetik Phase 4 rules fixture kimlikleri — production verisi değil. */
 
 export const SHOP_A = "shop-rules-a";
 export const SHOP_B = "shop-rules-b";
@@ -6,6 +6,8 @@ export const SHOP_B = "shop-rules-b";
 export const UID_OWNER_A = "uid-owner-rules-a";
 export const UID_OWNER_B = "uid-owner-rules-b";
 export const UID_NO_MEMBERSHIP = "uid-no-membership";
+export const UID_DISABLED = "uid-disabled-owner";
+export const UID_WRONG_ROLE = "uid-wrong-role";
 
 /**
  * Admin context (rules disabled) ile temel seed.
@@ -20,7 +22,9 @@ export async function seedRulesTestData(testEnv) {
             slug: SHOP_A,
             username: "rules_owner_a",
             password: "must-not-be-readable",
-            status: "active"
+            status: "active",
+            openHour: "09:00",
+            closeHour: "18:00"
         });
         await db.collection("berberler").doc(SHOP_B).set({
             name: "Rules Test Shop B",
@@ -47,6 +51,18 @@ export async function seedRulesTestData(testEnv) {
             uid: UID_OWNER_B,
             businessId: SHOP_B,
             role: "owner",
+            status: "active"
+        });
+        await db.collection("businessMemberships").doc(UID_DISABLED).set({
+            uid: UID_DISABLED,
+            businessId: SHOP_A,
+            role: "owner",
+            status: "disabled"
+        });
+        await db.collection("businessMemberships").doc(UID_WRONG_ROLE).set({
+            uid: UID_WRONG_ROLE,
+            businessId: SHOP_A,
+            role: "employee",
             status: "active"
         });
 

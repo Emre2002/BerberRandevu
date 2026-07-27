@@ -1,0 +1,205 @@
+rules_version = '2';
+
+// =============================================================================
+// PHASE 4B SHADOW / CANDIDATE RULES — Production'a deploy edilmez.
+// Test: firebase.rules-phase4b.json + firestore.phase4b.rules
+// =============================================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // --- Helpers ---
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function membershipPath() {
+      return /databases/$(database)/documents/businessMemberships/$(request.auth.uid);
+    }
+
+    function membershipExists() {
+      return isSignedIn() && exists(membershipPath());
+    }
+
+    function membershipData() {
+      return get(membershipPath()).data;
+    }
+
+    function hasActiveOwnerMembership() {
+      return membershipExists()
+        && membershipData().uid == request.auth.uid
+        && membershipData().role == 'owner'
+        && membershipData().status == 'active'
+        && membershipData().businessId is string
+        && membershipData().businessId.size() > 0;
+    }
+
+    function ownerBusinessId() {
+      return membershipData().businessId;
+    }
+
+    function ownsBusiness(businessId) {
+      return hasActiveOwnerMembership() && ownerBusinessId() == businessId;
+    }
+
+    function berberProtectedKeys() {
+      return [
+        'password',
+        'username',
+        'telegramChatId',
+        'subscriptionStatus',
+        'subscriptionEndDate',
+        'lastActivationCode',
+        'subscriptionRenewedAt',
+        'slug'
+      ];
+    }
+
+    function berberOwnerSafeUpdate() {
+      return !request.resource.data.diff(resource.data).affectedKeys()
+        .hasAny(berberProtectedKeys());
+    }
+
+    function tenantFieldMatches(fieldName, businessId) {
+      return resource.data[fieldName] == businessId;
+    }
+
+    function tenantFieldMatchesOnCreate(fieldName, businessId) {
+      return request.resource.data[fieldName] == businessId;
+    }
+
+    // --- businessMemberships ---
+
+    match /businessMemberships/{membershipUid} {
+      allow get: if isSignedIn()
+        && request.auth.uid == membershipUid
+        && resource.data.uid == request.auth.uid;
+      allow list, create, update, delete: if false;
+    }
+
+    // --- Private business (doc id = businessId / slug) ---
+
+    match /berberler/{businessId} {
+      allow get: if ownsBusiness(businessId);
+      allow list: if false;
+      allow create, delete: if false;
+      allow update: if ownsBusiness(businessId) && berberOwnerSafeUpdate();
+
+      match /blockedSlots/{slotId} {
+        // Public müşteri slot UI: path-scoped read (app.js where date query)
+        allow get, list: if true;
+        allow create, update, delete: if ownsBusiness(businessId);
+      }
+
+      match /appointments/{legacyDate} {
+        allow get, list: if ownsBusiness(businessId);
+        allow create, update, delete: if false;
+      }
+    }
+
+    // --- Public mirror ---
+
+    match /publicBarbers/{businessId} {
+      allow get: if true;
+      allow list: if false;
+      allow create, update, delete: if false;
+    }
+
+    // --- Appointments (tenant field: barberId) ---
+
+    match /appointments/{appointmentId} {
+      allow get: if hasActiveOwnerMembership()
+        && tenantFieldMatches('barberId', ownerBusinessId());
+      allow list: if hasActiveOwnerMembership()
+        && resource.data.barberId == ownerBusinessId();
+      allow create, update, delete: if false;
+    }
+
+    // --- Customers (tenant field: barberSlug) ---
+
+    match /customers/{customerId} {
+      allow get: if hasActiveOwnerMembership()
+        && tenantFieldMatches('barberSlug', ownerBusinessId());
+      allow list: if hasActiveOwnerMembership()
+        && resource.data.barberSlug == ownerBusinessId();
+      allow create: if hasActiveOwnerMembership()
+        && tenantFieldMatchesOnCreate('barberSlug', ownerBusinessId());
+      allow update: if hasActiveOwnerMembership()
+        && tenantFieldMatches('barberSlug', ownerBusinessId())
+        && tenantFieldMatchesOnCreate('barberSlug', ownerBusinessId());
+      allow delete: if hasActiveOwnerMembership()
+        && tenantFieldMatches('barberSlug', ownerBusinessId());
+    }
+
+    // --- Notifications (tenant: barberSlug) — read owner; write server-only ---
+
+    match /notifications/{notificationId} {
+      allow get, list: if hasActiveOwnerMembership()
+        && resource.data.barberSlug == ownerBusinessId();
+      allow create, update, delete: if false;
+    }
+
+    // --- Campaigns (tenant: barberSlug on doc) ---
+
+    match /campaigns/{campaignId} {
+      allow get: if hasActiveOwnerMembership()
+        && resource.data.barberSlug == ownerBusinessId();
+      allow list: if hasActiveOwnerMembership()
+        && resource.data.barberSlug == ownerBusinessId();
+      allow create: if hasActiveOwnerMembership()
+        && request.resource.data.barberSlug == ownerBusinessId();
+      allow update, delete: if false;
+    }
+
+    // --- Deleted appointments archive ---
+
+    match /deletedAppointments/{archiveId} {
+      allow get, list: if hasActiveOwnerMembership()
+        && resource.data.barberSlug == ownerBusinessId();
+      allow create: if hasActiveOwnerMembership()
+        && request.resource.data.barberSlug == ownerBusinessId();
+      allow update, delete: if false;
+    }
+
+    // --- Public intake forms ---
+
+    match /demo_talepleri/{requestId} {
+      allow create: if true;
+      allow get, list, update, delete: if false;
+    }
+
+    match /pendingBarbers/{pendingId} {
+      allow create: if true;
+      allow get, list, update, delete: if false;
+    }
+
+    // --- Server-only collections ---
+
+    match /activationCodes/{codeId} {
+      allow read, write: if false;
+    }
+
+    match /payments/{paymentId} {
+      allow read, write: if false;
+    }
+
+    match /rateLimits/{docId} {
+      allow read, write: if false;
+    }
+
+    match /appointmentAttempts/{docId} {
+      allow read, write: if false;
+    }
+
+    match /users/{userId} {
+      allow read, write: if false;
+    }
+
+    // --- Default deny ---
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

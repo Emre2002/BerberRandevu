@@ -1,5 +1,5 @@
 /**
- * Rules test runner — env temizler, firebase.rules-test.json emulator'ını yönetir.
+ * Rules test runner — env temizler, config'e göre emulator yönetir.
  */
 import { spawn, spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
@@ -14,15 +14,16 @@ const target = process.argv[2];
 const TEST_FILES = {
     config: resolve(__dirname, "config-path.test.mjs"),
     current: resolve(__dirname, "current-characterization.test.mjs"),
-    target: resolve(__dirname, "target-requirements.test.mjs")
+    target: resolve(__dirname, "target-requirements.test.mjs"),
+    candidate: resolve(__dirname, "candidate", "candidate-security.test.mjs")
 };
 
-const RULES_TEST_CFG = JSON.parse(
-    readFileSync(resolve(REPO_ROOT, "firebase.rules-test.json"), "utf8")
-);
-
-const FIRESTORE_PORT = RULES_TEST_CFG.emulators.firestore.port;
-const AUTH_PORT = RULES_TEST_CFG.emulators.auth.port;
+const CONFIG_BY_TARGET = {
+    config: null,
+    current: "firebase.rules-test.json",
+    target: "firebase.rules-test.json",
+    candidate: "firebase.rules-phase4b.json"
+};
 
 const file = TEST_FILES[target];
 if (!file) {
@@ -30,7 +31,15 @@ if (!file) {
     process.exit(2);
 }
 
-function buildSanitizedEnv() {
+function loadPorts(configFile) {
+    const cfg = JSON.parse(readFileSync(resolve(REPO_ROOT, configFile), "utf8"));
+    return {
+        firestore: cfg.emulators.firestore.port,
+        auth: cfg.emulators.auth.port
+    };
+}
+
+function buildSanitizedEnv(ports) {
     const env = { ...process.env };
     const UNSET_KEYS = [
         "GCLOUD_PROJECT",
@@ -45,8 +54,10 @@ function buildSanitizedEnv() {
         delete env[key];
     }
     env.RULES_TEST_SANITIZED = "1";
-    env.FIRESTORE_EMULATOR_HOST = `127.0.0.1:${FIRESTORE_PORT}`;
-    env.FIREBASE_AUTH_EMULATOR_HOST = `127.0.0.1:${AUTH_PORT}`;
+    if (ports) {
+        env.FIRESTORE_EMULATOR_HOST = `127.0.0.1:${ports.firestore}`;
+        env.FIREBASE_AUTH_EMULATOR_HOST = `127.0.0.1:${ports.auth}`;
+    }
     return env;
 }
 
@@ -70,14 +81,15 @@ function waitForPort(port, timeoutMs = 120000) {
     });
 }
 
-async function runWithEmulator(testFile) {
-    const env = buildSanitizedEnv();
+async function runWithEmulator(testFile, configFile) {
+    const ports = loadPorts(configFile);
+    const env = buildSanitizedEnv(ports);
     const emu = spawn(
         "firebase",
         [
             "emulators:start",
             "--config",
-            "firebase.rules-test.json",
+            configFile,
             "--only",
             "firestore,auth",
             "--project",
@@ -95,8 +107,8 @@ async function runWithEmulator(testFile) {
     process.on("SIGTERM", killEmu);
 
     try {
-        await waitForPort(FIRESTORE_PORT);
-        await waitForPort(AUTH_PORT);
+        await waitForPort(ports.firestore);
+        await waitForPort(ports.auth);
 
         const result = spawnSync(process.execPath, ["--test", testFile], {
             stdio: "inherit",
@@ -111,9 +123,7 @@ async function runWithEmulator(testFile) {
 }
 
 if (target === "config") {
-    const env = buildSanitizedEnv();
-    delete env.FIRESTORE_EMULATOR_HOST;
-    delete env.FIREBASE_AUTH_EMULATOR_HOST;
+    const env = buildSanitizedEnv(null);
     const result = spawnSync(process.execPath, ["--test", file], {
         stdio: "inherit",
         env,
@@ -122,5 +132,6 @@ if (target === "config") {
     process.exit(result.status ?? 1);
 }
 
-const exitCode = await runWithEmulator(file);
+const configFile = CONFIG_BY_TARGET[target];
+const exitCode = await runWithEmulator(file, configFile);
 process.exit(exitCode);
