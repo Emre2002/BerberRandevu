@@ -1,0 +1,14 @@
+functions/
+tests/
+scripts/
+fixtures/
+.vscode/
+.git/
+*.md
+firebase.json
+.firebaserc
+firestore.rules
+firestore.staging.rules
+firestore.indexes.json
+SECURITY_BASELINE_MANIFEST.json
+firebase-config.example.js
