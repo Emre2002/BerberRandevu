@@ -209,8 +209,8 @@ describe("Phase 4B2 emulator smoke — firestore.emulator.rules", () => {
         assert.match(membershipBlock[1], /request\.auth != null/);
     });
 
-    it("production firestore.rules değişmedi", () => {
+    it("production firestore.rules membership tabanlı güvenli model içerir", () => {
         const prodRules = readFileSync(resolve(ROOT, "firestore.rules"), "utf8");
-        assert.doesNotMatch(prodRules, /publicBarbers/);
+        assert.match(prodRules, /businessMemberships/);
     });
 });

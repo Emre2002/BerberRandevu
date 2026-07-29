@@ -135,7 +135,8 @@ describe("public client — fetchPublicBarber fail-closed", () => {
         assert.match(appSrc, /isCustomerPage[\s\S]*?fetchPublicBarber\(aktifDukkan\)/);
     });
 
-    it("12. admin paneli private berberler okumasını korur", () => {
-        assert.match(appSrc, /getDoc\(doc\(db,\s*"berberler",\s*aktifDukkan\)\)/);
+    it("12. admin paneli membership tabanlı private berber okumasını kullanır", () => {
+        assert.match(appSrc, /fetchBarber\(getTenantBusinessId\(\)\)/);
+        assert.match(appSrc, /getAuthorizedBusinessContextWithFreshToken/);
     });
 });

@@ -235,6 +235,26 @@ describe("candidate-security — firestore.phase4b.rules", () => {
             const ctx = testEnv.authenticatedContext(UID_OWNER_A);
             await assertFails(deleteDoc(doc(ctx.firestore(), "appointments", "appt-rules-a1")));
         });
+
+        it("30b. owner calendar date+barberId query allow", async () => {
+            const ctx = testEnv.authenticatedContext(UID_OWNER_A);
+            const q = query(
+                collection(ctx.firestore(), "appointments"),
+                where("date", "==", "2099-01-15"),
+                where("barberId", "==", SHOP_A)
+            );
+            await assertSucceeds(getDocs(q));
+        });
+
+        it("30c. owner cross-tenant barberId query deny", async () => {
+            const ctx = testEnv.authenticatedContext(UID_OWNER_A);
+            const q = query(
+                collection(ctx.firestore(), "appointments"),
+                where("date", "==", "2099-01-15"),
+                where("barberId", "==", SHOP_B)
+            );
+            await assertFails(getDocs(q));
+        });
     });
 
     describe("default deny", () => {

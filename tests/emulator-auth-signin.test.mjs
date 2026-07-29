@@ -109,11 +109,13 @@ describe("emulator auth — client sentetik email üretmez", () => {
         assert.doesNotMatch(src, /callable\(\{[^}]*password/);
     });
 
-    it("giris.js production legacy yolunu korur", () => {
+    it("giris.js production Firebase Auth yolunu kullanır", () => {
         const src = readFileSync(GIRIS_SRC, "utf8");
-        assert.match(src, /resolveBarberLogin\(username, password\)/);
+        assert.match(src, /signInWithProductionOwnerAuth\(username, password\)/);
         assert.match(src, /shouldUseEmulatorAuthLogin\(\)/);
         assert.match(src, /signInWithEmulatorAuth\(username, password\)/);
+        assert.doesNotMatch(src, /resolveBarberLogin\(username, password\)/);
+        assert.doesNotMatch(src, /loginBarberSession/);
     });
 
     it("usernameNormalization.js sentetik email üretmez (client)", async () => {

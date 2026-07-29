@@ -46,8 +46,8 @@ describe("emulator auth persistence — sign-in sırası", () => {
     });
 });
 
-describe("emulator login — redirect ve legacy izolasyon", () => {
-    it("production host + flag legacy yolu kullanır", () => {
+describe("emulator login — redirect ve auth izolasyon", () => {
+    it("production host emulator login yolunu açamaz", () => {
         assert.equal(
             shouldUseEmulatorAuthLogin({
                 hostname: "berberv1.vercel.app",
@@ -56,7 +56,8 @@ describe("emulator login — redirect ve legacy izolasyon", () => {
             false
         );
         const src = readFileSync(GIRIS_SRC, "utf8");
-        assert.match(src, /resolveBarberLogin\(username, password\)/);
+        assert.match(src, /signInWithProductionOwnerAuth\(username, password\)/);
+        assert.doesNotMatch(src, /resolveBarberLogin\(username, password\)/);
     });
 
     it("sign-in başarısız olduğunda redirect olmaz", () => {
@@ -66,7 +67,7 @@ describe("emulator login — redirect ve legacy izolasyon", () => {
         assert.doesNotMatch(catchBlock[1], /window\.location/);
     });
 
-    it("sign-in başarılı olduktan sonra redirect ve legacy session yazılır", () => {
+    it("sign-in başarılı olduktan sonra membership tabanlı redirect olur", () => {
         const src = readFileSync(GIRIS_SRC, "utf8");
         const emulatorBranch = src.match(
             /if \(shouldUseEmulatorAuthLogin\(\)\) \{([\s\S]*?)return;\s*\}/
@@ -74,12 +75,10 @@ describe("emulator login — redirect ve legacy izolasyon", () => {
         assert.ok(emulatorBranch);
         const branch = emulatorBranch[1];
         const signInIdx = branch.indexOf("await signInWithEmulatorAuth");
-        const sessionIdx = branch.indexOf("loginBarberSession");
-        const redirectIdx = branch.indexOf("window.location.href");
+        const redirectIdx = branch.indexOf("redirectAfterAuth");
         assert.ok(signInIdx > -1);
-        assert.ok(sessionIdx > signInIdx);
-        assert.ok(redirectIdx > sessionIdx);
-        assert.match(branch, /authEmulator=1/);
+        assert.ok(redirectIdx > signInIdx);
+        assert.doesNotMatch(branch, /loginBarberSession/);
     });
 });
 
@@ -242,8 +241,8 @@ describe("emulator firestore rules — businessMemberships security", () => {
         assert.match(membershipBlock[1], /request\.auth != null/);
     });
 
-    it("production firestore.rules dosyası değiştirilmeden kalır", () => {
+    it("production firestore.rules dosyası membership güvenli model içerir", () => {
         const prodRules = readFileSync(resolve(ROOT, "firestore.rules"), "utf8");
-        assert.doesNotMatch(prodRules, /businessMemberships/);
+        assert.match(prodRules, /businessMemberships/);
     });
 });

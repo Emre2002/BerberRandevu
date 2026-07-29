@@ -1,5 +1,9 @@
 import { db } from "./firebase-config.js";
-import { getBarberBlockReason, fetchPublicBarber } from "./firestoreService.js";
+import { getBarberBlockReason, fetchPublicBarber, fetchBarber } from "./firestoreService.js";
+import {
+    getAuthorizedBusinessContextWithFreshToken,
+    clearAuthorizedBusinessContext
+} from "./authorizedBusinessContext.js";
 import { createAppointmentWithEffects, findActiveAppointmentByPhoneOnDay } from "./appointmentService.js";
 import { normalizePhone } from "./customerService.js";
 import {
@@ -49,8 +53,23 @@ const isCustomerPageEarly = typeof document !== "undefined" && document.getEleme
 const isAdminPageEarly = typeof document !== "undefined" && document.getElementById?.("calendarGrid");
 let aktifDukkan = urlSlug || (isCustomerPageEarly ? "x-men" : "");
 
+/** Admin panelinde membership'ten gelen güvenilir tenant kimliği. */
+let authorizedAdminBusinessId = null;
+
 /** Admin panelinde abonelik kilidi için önbellek (ekstra Firestore read yok). */
 let cachedBarberData = null;
+
+function getTenantBusinessId() {
+    if (isAdminPageEarly) {
+        if (!authorizedAdminBusinessId) {
+            throw Object.assign(new Error("authorized_business_context_required"), {
+                code: "permission-denied"
+            });
+        }
+        return authorizedAdminBusinessId;
+    }
+    return aktifDukkan;
+}
 
 function escapeHtml(str) {
     return String(str)
@@ -203,13 +222,12 @@ async function dukkanArayuzunuDinamikYap() {
                 return false;
             }
         } else {
-            const dukkanSnap = await getDoc(doc(db, "berberler", aktifDukkan));
-            if (!dukkanSnap.exists()) {
-                console.log("Firebase'de dükkan bulunamadı:", aktifDukkan);
+            veri = await fetchBarber(getTenantBusinessId());
+            if (!veri) {
+                console.log("Firebase'de dükkan bulunamadı:", getTenantBusinessId());
                 return true;
             }
-            veri = dukkanSnap.data();
-            cachedBarberData = { slug: aktifDukkan, ...veri };
+            cachedBarberData = veri;
         }
 
         if (veri) {
@@ -373,10 +391,42 @@ function showError(container, message) {
 const TECHNICAL_UI_PATTERN =
     /firebase|firestore|console|token|app\s*check|cfbooking|forceclient|super\s*admin|cloud\s*function|rate\s*limit|functions\//i;
 
+function adminAccessErrorMessage(err) {
+    const marker = String(err?.message || err?.code || "");
+    if (marker === "authorized_business_context_required") {
+        return "İşletme yetkiniz bulunamadı. Lütfen tekrar giriş yapın.";
+    }
+    if (marker === "authorized_business_context_mismatch") {
+        return "Bu işletmeye erişim yetkiniz bulunmuyor.";
+    }
+    if (marker === "authorized_business_token_refresh_failed") {
+        return "Oturum doğrulanamadı. Lütfen tekrar giriş yapın.";
+    }
+    return adminFirestoreErrorMessage(err);
+}
+
+function adminFirestoreErrorMessage(err) {
+    const code = String(err?.code || "");
+    if (code === "permission-denied" || code.includes("permission-denied")) {
+        return "Randevu takvimine erişilemiyor. Lütfen tekrar giriş yapın.";
+    }
+    if (code === "unavailable" || code.includes("unavailable")) {
+        return "Sunucuya ulaşılamıyor. İnternet bağlantınızı kontrol edip tekrar deneyin.";
+    }
+    const msg = err?.message || "";
+    if (msg && !TECHNICAL_UI_PATTERN.test(msg)) {
+        return msg;
+    }
+    return "Bir sorun oluştu. Lütfen tekrar deneyin.";
+}
+
 function firestoreErrorMessage(err) {
+    if (isAdminPageEarly) {
+        return adminFirestoreErrorMessage(err);
+    }
     const code = err?.code || "";
     if (code === "permission-denied") {
-        return "Firestore erişim izni reddedildi. Firebase Console → Firestore → Rules bölümünden okuma/yazma izinlerini kontrol edin.";
+        return "Şu anda bilgilere erişilemiyor. Lütfen daha sonra tekrar deneyin.";
     }
     if (code === "unavailable") {
         return "Firebase sunucusuna ulaşılamıyor. İnternet bağlantınızı kontrol edin.";
@@ -418,8 +468,12 @@ function stripCustomerAdminHints() {
 }
 
 async function fetchNewAppointments(date) {
-    // Kanka buradaki yolu ana appointments koleksiyonuna çevirdik ki takvim kilitlenmesin
-    const q = query(collection(db, "appointments"), where("date", "==", date), where("barberId", "==", aktifDukkan));
+    const tenantId = getTenantBusinessId();
+    const q = query(
+        collection(db, "appointments"),
+        where("date", "==", date),
+        where("barberId", "==", tenantId)
+    );
     const snap = await getDocs(q);
     const map = {};
     snap.forEach(d => {
@@ -432,7 +486,8 @@ async function fetchNewAppointments(date) {
 }
 
 async function fetchLegacyDayDoc(date, slots) {
-    const snap = await getDoc(doc(db, "berberler", aktifDukkan, "appointments", date));
+    const tenantId = getTenantBusinessId();
+    const snap = await getDoc(doc(db, "berberler", tenantId, "appointments", date));
     const appointments = {};
     const blocked = new Set();
     let dayClosed = false;
@@ -478,7 +533,8 @@ async function fetchBlockedSlotsCollection(date, slots) {
     const slotList = slots ?? getVisibleSlots();
 
     try {
-        const q = query(collection(db, "berberler", aktifDukkan, "blockedSlots"), where("date", "==", date));
+        const tenantId = getTenantBusinessId();
+        const q = query(collection(db, "berberler", tenantId, "blockedSlots"), where("date", "==", date));
         const snap = await getDocs(q);
         snap.forEach(d => {
             const data = d.data();
@@ -492,7 +548,8 @@ async function fetchBlockedSlotsCollection(date, slots) {
     } catch (hata) {
         console.warn("Koleksiyon çekilirken hata oluştu, döküman bazlı kontrol deneniyor:", hata);
         try {
-            const dayRef = doc(db, "berberler", aktifDukkan, "blockedSlots", blockedSlotId(date, "ALL"));
+            const tenantId = getTenantBusinessId();
+            const dayRef = doc(db, "berberler", tenantId, "blockedSlots", blockedSlotId(date, "ALL"));
             const daySnap = await getDoc(dayRef);
             if (daySnap.exists()) {
                 dayClosed = true;
@@ -501,7 +558,7 @@ async function fetchBlockedSlotsCollection(date, slots) {
             }
 
             await Promise.all(slotList.map(async (time) => {
-                const ref = doc(db, "berberler", aktifDukkan, "blockedSlots", blockedSlotId(date, time));
+                const ref = doc(db, "berberler", tenantId, "blockedSlots", blockedSlotId(date, time));
                 const snap = await getDoc(ref);
                 if (snap.exists()) blocked.add(time);
             }));
@@ -1591,8 +1648,8 @@ function initAdminPage() {
             drawCalendar();
         } catch (err) {
             console.error("Takvim yüklenemedi:", err);
-            showError(calendarGrid, "Takvim yüklenemedi. Lütfen sayfayı yenileyin.");
-            showToast("Takvim yüklenemedi.", "error");
+            showError(calendarGrid, adminAccessErrorMessage(err));
+            showToast(adminAccessErrorMessage(err), "error");
         }
     }
 
@@ -1624,11 +1681,27 @@ function initAdminPage() {
 
 function startAdminApp(slug) {
     if (!slug) return;
-    aktifDukkan = slug;
-    dukkanArayuzunuDinamikYap().then((canContinue) => {
-        if (!canContinue) return;
-        initAdminPage();
-    });
+
+    const calendarGrid = document.getElementById("calendarGrid");
+    if (calendarGrid) {
+        calendarGrid.innerHTML = '<div class="slots-loading">Yetki doğrulanıyor...</div>';
+    }
+
+    getAuthorizedBusinessContextWithFreshToken({ expectedBusinessId: slug })
+        .then(async (context) => {
+            authorizedAdminBusinessId = context.businessId;
+            aktifDukkan = context.businessId;
+            const canContinue = await dukkanArayuzunuDinamikYap();
+            if (!canContinue) return;
+            initAdminPage();
+        })
+        .catch((err) => {
+            authorizedAdminBusinessId = null;
+            clearAuthorizedBusinessContext();
+            const msg = adminAccessErrorMessage(err);
+            if (calendarGrid) showError(calendarGrid, msg);
+            showToast(msg, "error");
+        });
 }
 
 function initAdminWhenAuthed() {

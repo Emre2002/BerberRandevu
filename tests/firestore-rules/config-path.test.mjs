@@ -44,8 +44,9 @@ describe("Phase 4B1 candidate rules config separation", () => {
         assert.equal(phase4bCfg.firestore.rules, "firestore.phase4b.rules");
     });
 
-    it("production firestore.rules değişmemiş (businessMemberships yok)", () => {
-        assert.doesNotMatch(prodRules, /businessMemberships/);
+    it("production firestore.rules membership tabanlı güvenli model içerir", () => {
+        assert.match(prodRules, /businessMemberships/);
+        assert.match(prodRules, /match \/\{document=\*\*\}/);
     });
 
     it("candidate rules businessMemberships ve default deny içerir", () => {
