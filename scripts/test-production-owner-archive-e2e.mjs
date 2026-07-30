@@ -127,7 +127,9 @@ try {
     const db = getAdminDb();
     const publicSnap = await db.collection("publicBarbers").doc(businessId).get();
     const services = publicSnap.data()?.selectedServices;
-    const service = Array.isArray(services) && services.length ? services[0] : "Saç Kesimi";
+    const service = Array.isArray(services) && services.length
+        ? services[0]
+        : "Saç Kesimi & Yıkama";
     const idempotencyKey = crypto.randomUUID();
 
     const createResp = await fetch(`${BASE}/api/owner/create-appointment`, {
@@ -139,7 +141,7 @@ try {
         },
         body: JSON.stringify({
             customerName: "Archive E2E Test",
-            phone: "05551112233",
+            phone: `0555${String(Date.now()).slice(-7)}`,
             service,
             date,
             time,

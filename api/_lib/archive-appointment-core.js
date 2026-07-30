@@ -100,10 +100,8 @@ function resolveArchiveDocId(businessId, appointmentId, existingArchives) {
     };
 }
 
-async function releaseSlotLock(tx, lockRef, appointmentId) {
-    if (!lockRef) return;
-    const lockSnap = await tx.get(lockRef);
-    if (!lockSnap.exists) return;
+function deleteMatchingSlotLock(tx, lockSnap, lockRef, appointmentId) {
+    if (!lockRef || !lockSnap?.exists) return;
     if (lockSnap.data()?.appointmentId === appointmentId) {
         tx.delete(lockRef);
     }
@@ -274,6 +272,14 @@ export async function archiveOwnerAppointment(db, input) {
         const archiveSnap = await tx.get(archiveRef);
         const appointmentSnap = await tx.get(appointmentRef);
 
+        const appointment = appointmentSnap.exists ? (appointmentSnap.data() || {}) : null;
+        const date = appointment ? String(appointment.date || "").trim() : "";
+        const time = appointment ? String(appointment.time || "").trim() : "";
+        const lockRef = date && time
+            ? db.collection("appointmentSlotLocks").doc(slotLockId(businessId, date, time))
+            : null;
+        const lockSnap = lockRef ? await tx.get(lockRef) : null;
+
         if (archiveSnap.exists) {
             if (archiveSnap.data()?.barberSlug !== businessId) {
                 const err = new Error("archive_conflict");
@@ -283,21 +289,14 @@ export async function archiveOwnerAppointment(db, input) {
 
             let reconciled = false;
             if (appointmentSnap.exists) {
-                const appointment = appointmentSnap.data() || {};
                 if (appointment.barberId !== businessId) {
                     const err = new Error("forbidden");
                     err.code = "forbidden";
                     throw err;
                 }
 
-                const date = String(appointment.date || "").trim();
-                const time = String(appointment.time || "").trim();
-                const lockRef = date && time
-                    ? db.collection("appointmentSlotLocks").doc(slotLockId(businessId, date, time))
-                    : null;
-
                 tx.delete(appointmentRef);
-                await releaseSlotLock(tx, lockRef, appointmentId);
+                deleteMatchingSlotLock(tx, lockSnap, lockRef, appointmentId);
                 reconciled = true;
             }
 
@@ -313,18 +312,11 @@ export async function archiveOwnerAppointment(db, input) {
             throw err;
         }
 
-        const appointment = appointmentSnap.data() || {};
         if (appointment.barberId !== businessId) {
             const err = new Error("forbidden");
             err.code = "forbidden";
             throw err;
         }
-
-        const date = String(appointment.date || "").trim();
-        const time = String(appointment.time || "").trim();
-        const lockRef = date && time
-            ? db.collection("appointmentSlotLocks").doc(slotLockId(businessId, date, time))
-            : null;
 
         const writeRef = db.collection(ARCHIVE_COLLECTION).doc(deterministicArchiveId);
         const archivePayload = buildArchivePayload({
@@ -339,7 +331,7 @@ export async function archiveOwnerAppointment(db, input) {
 
         tx.set(writeRef, archivePayload);
         tx.delete(appointmentRef);
-        await releaseSlotLock(tx, lockRef, appointmentId);
+        deleteMatchingSlotLock(tx, lockSnap, lockRef, appointmentId);
 
         return buildArchiveSuccess(appointmentId, deterministicArchiveId);
     });

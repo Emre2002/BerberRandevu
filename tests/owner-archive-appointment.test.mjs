@@ -61,7 +61,8 @@ describe("owner archive appointment core", () => {
     it("releases slot lock tied to archived appointment", () => {
         const src = readFileSync(resolve(ROOT, "api/_lib/archive-appointment-core.js"), "utf8");
         assert.match(src, /appointmentSlotLocks/);
-        assert.match(src, /releaseSlotLock/);
+        assert.match(src, /deleteMatchingSlotLock/);
+        assert.match(src, /appointmentSlotLocks/);
     });
 
     it("parses legacy appointment ids", () => {
