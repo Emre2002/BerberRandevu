@@ -46,7 +46,9 @@ export function sendRateLimited(res, {
     retryAfterSeconds = null,
     limit = null,
     remaining = 0,
-    resetAtSeconds = null
+    resetAtSeconds = null,
+    scope = null,
+    requestId = null
 } = {}) {
     const headers = buildRateLimitHeaders({
         limit,
@@ -59,6 +61,10 @@ export function sendRateLimited(res, {
         code: "rate_limited",
         retryAfterSeconds: Number.isFinite(retryAfterSeconds) ? retryAfterSeconds : null
     };
+    if (scope) body.scope = scope;
+    if (requestId) body.requestId = requestId;
+    if (Number.isFinite(limit)) body.limit = limit;
+    if (Number.isFinite(remaining)) body.remaining = remaining;
     sendJson(res, 429, body, headers);
 }
 

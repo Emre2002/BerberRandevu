@@ -1,14 +1,18 @@
 import crypto from "node:crypto";
 import { FieldValue } from "firebase-admin/firestore";
 import {
-    generateHourlySlots,
-    validateAvailabilityDate
-} from "./availability.js";
+    isPastAppointmentSlot,
+    normalizeTimeHHmm,
+    validateAppointmentDate
+} from "./appointment-datetime.js";
+import { generateHourlySlots } from "./availability.js";
 import {
-    checkBookingSuccessLimit,
+    assertSuccessQuotaAvailable,
+    buildSuccessCounterWritePayload,
     enforceBookingAttemptLimit,
-    hashPhoneIdentity,
-    incrementBookingSuccessLimit
+    enforceCreateIpBusinessBurstLimit,
+    readSuccessCounterState,
+    resolveSuccessQuotaRefs
 } from "./booking-rate-limit.js";
 import { resolvePublicBusinessSlug } from "./resolve-public-business-slug.js";
 import { buildRateLimitHeaders } from "./http.js";
@@ -28,6 +32,29 @@ const DEFAULT_BARBER_SERVICES = [
     "Saç-Sakal Kesimi"
 ];
 
+export const BOOKING_HTTP_MESSAGES = {
+    business_not_found: "İşletme bilgileri bulunamadı.",
+    slot_unavailable: "Bu saat kısa süre önce doldu. Lütfen başka bir saat seçin.",
+    duplicate_phone_day: "Bu telefon numarası ile bugün için zaten bir randevu bulunmaktadır. Gün içerisinde yalnızca 1 randevu oluşturabilirsiniz.",
+    appointment_in_past: "Geçmiş bir tarih veya saate randevu oluşturulamaz.",
+    invalid_request: "Lütfen randevu bilgilerini kontrol edin.",
+    invalid_phone: "Telefon numarası geçerli değil.",
+    invalid_service: "Seçilen hizmet artık kullanılamıyor.",
+    rate_limited: "Çok fazla işlem yapıldı. Lütfen kısa süre sonra tekrar deneyin.",
+    rate_limit_config_error: "Randevu sistemi yapılandırması eksik. Lütfen daha sonra tekrar deneyin.",
+    internal_error: "Randevu oluşturulurken beklenmeyen bir hata oluştu."
+};
+
+function buildErrorBody(code, requestId = null) {
+    const body = {
+        ok: false,
+        code,
+        message: BOOKING_HTTP_MESSAGES[code] || BOOKING_HTTP_MESSAGES.internal_error
+    };
+    if (requestId) body.requestId = requestId;
+    return body;
+}
+
 export const BOOKING_ERROR_CODES = {
     invalid_request: "invalid_request",
     business_not_found: "business_not_found",
@@ -39,9 +66,10 @@ export const BOOKING_ERROR_CODES = {
     day_closed: "slot_unavailable",
     slot_blocked: "slot_unavailable",
     slot_taken: "slot_unavailable",
-    duplicate_phone_day: "slot_unavailable",
+    duplicate_phone_day: "duplicate_phone_day",
     spam_detected: "invalid_request",
     rate_limited: "rate_limited",
+    rate_limit_config_error: "rate_limit_config_error",
     internal_error: "internal_error"
 };
 
@@ -94,34 +122,6 @@ function slotLockId(businessId, date, time) {
 
 function hashIdempotencyKey(key) {
     return crypto.createHash("sha256").update(String(key)).digest("hex").slice(0, 40);
-}
-
-function istanbulNowParts(now = new Date()) {
-    const formatter = new Intl.DateTimeFormat("en-GB", {
-        timeZone: "Europe/Istanbul",
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: false
-    });
-    const parts = formatter.formatToParts(now);
-    const pick = (type) => parts.find((p) => p.type === type)?.value || "00";
-    return {
-        date: `${pick("year")}-${pick("month")}-${pick("day")}`,
-        hour: pick("hour"),
-        minute: pick("minute")
-    };
-}
-
-function isPastSlot(date, time) {
-    const now = istanbulNowParts();
-    if (date < now.date) return true;
-    if (date > now.date) return false;
-    const [h, m] = time.split(":").map(Number);
-    const nowMinutes = Number(now.hour) * 60 + Number(now.minute);
-    return h * 60 + m <= nowMinutes;
 }
 
 async function loadBlockedState(db, businessId, date, slots) {
@@ -267,13 +267,13 @@ async function runBestEffortSideEffects(db, payload) {
 /**
  * @param {import('firebase-admin/firestore').Firestore} db
  */
-export async function createPublicAppointment(db, input, { clientIp = "unknown" } = {}) {
+export async function createPublicAppointment(db, input, { clientIp = "unknown", ownerContext = false } = {}) {
     const rawSlug = String(input.dukkan || input.shop || input.barberSlug || input.businessId || "").trim();
     const customerName = cleanDisplayName(input.customerName);
     const phoneRaw = String(input.phone || "").trim();
     const service = String(input.service || "").trim();
     const date = String(input.date || "").trim();
-    const time = String(input.time || "").trim();
+    const time = normalizeTimeHHmm(String(input.time || "").trim());
     const musteriNotu = String(input.musteriNotu || "").trim();
     const website = String(input.website || "").trim();
     const idempotencyKey = String(input.idempotencyKey || input.requestId || "").trim();
@@ -297,6 +297,10 @@ export async function createPublicAppointment(db, input, { clientIp = "unknown" 
         throw err;
     }
 
+    if (!ownerContext) {
+        await enforceCreateIpBusinessBurstLimit(db, businessId, clientIp);
+    }
+
     const idempotencyDocId = idempotencyKey ? hashIdempotencyKey(idempotencyKey) : null;
     if (idempotencyDocId) {
         const idemSnap = await db.collection("appointmentIdempotency").doc(idempotencyDocId).get();
@@ -309,6 +313,9 @@ export async function createPublicAppointment(db, input, { clientIp = "unknown" 
                     ok: true,
                     appointmentId: existingId,
                     businessId,
+                    date: String(idemData.date || date),
+                    time: normalizeTimeHHmm(String(idemData.time || time)),
+                    status: "confirmed",
                     idempotentReplay: true
                 };
             }
@@ -321,28 +328,33 @@ export async function createPublicAppointment(db, input, { clientIp = "unknown" 
         throw err;
     }
 
-    if (!isValidTurkishPhone(phoneRaw)) {
+    const phoneOptional = ownerContext && (!phoneRaw || phoneRaw === "—");
+    if (!phoneOptional && !isValidTurkishPhone(phoneRaw)) {
         const err = new Error("invalid_request");
         err.code = "invalid_phone";
         throw err;
     }
 
-    const dateCheck = validateAvailabilityDate(date);
+    const dateCheck = validateAppointmentDate(date);
     if (!dateCheck.ok) {
         const err = new Error("invalid_request");
-        err.code = "invalid_request";
+        if (dateCheck.code === "past_date") {
+            err.code = "appointment_in_past";
+        } else {
+            err.code = "invalid_request";
+        }
         throw err;
     }
 
-    if (!/^\d{2}:\d{2}$/.test(time)) {
+    if (!time) {
         const err = new Error("invalid_request");
         err.code = "invalid_slot";
         throw err;
     }
 
-    if (isPastSlot(date, time)) {
+    if (isPastAppointmentSlot(date, time)) {
         const err = new Error("invalid_request");
-        err.code = "invalid_slot";
+        err.code = "appointment_in_past";
         throw err;
     }
 
@@ -353,9 +365,11 @@ export async function createPublicAppointment(db, input, { clientIp = "unknown" 
     }
 
     const normalizedPhone = normalizePhone(phoneRaw);
-    const displayPhone = phoneRaw.replace(/\s/g, "");
+    const displayPhone = phoneOptional ? "—" : phoneRaw.replace(/\s/g, "");
 
-    await enforceBookingAttemptLimit(db, businessId, normalizedPhone);
+    if (!ownerContext) {
+        await enforceBookingAttemptLimit(db, businessId, normalizedPhone);
+    }
 
     const publicSnap = await db.collection("publicBarbers").doc(businessId).get();
     const publicBarber = publicSnap.data() || {};
@@ -366,7 +380,7 @@ export async function createPublicAppointment(db, input, { clientIp = "unknown" 
         throw err;
     }
 
-    if (publicBarber.bookingOpen !== true) {
+    if (!ownerContext && publicBarber.bookingOpen !== true) {
         const err = new Error("invalid_request");
         err.code = "booking_closed";
         throw err;
@@ -400,55 +414,128 @@ export async function createPublicAppointment(db, input, { clientIp = "unknown" 
         throw err;
     }
 
-    await checkBookingSuccessLimit(db, businessId, normalizedPhone, date);
-
     const lockId = slotLockId(businessId, date, time);
     const lockRef = db.collection("appointmentSlotLocks").doc(lockId);
     const appointmentRef = db.collection("appointments").doc();
     const idempotencyRef = idempotencyDocId
         ? db.collection("appointmentIdempotency").doc(idempotencyDocId)
         : null;
+    const quota = !ownerContext
+        ? resolveSuccessQuotaRefs(db, businessId, normalizedPhone, clientIp)
+        : null;
+
+    let committedAppointmentId = appointmentRef.id;
 
     try {
-        await db.runTransaction(async (tx) => {
-            const lockSnap = await tx.get(lockRef);
-            if (lockSnap.exists) {
-                const err = new Error("slot_unavailable");
-                err.code = "slot_taken";
-                throw err;
+        const txnResult = await db.runTransaction(async (tx) => {
+            const reads = [
+                tx.get(lockRef),
+                idempotencyRef ? tx.get(idempotencyRef) : Promise.resolve({ exists: false, data: () => ({}) }),
+                tx.get(
+                    db.collection("appointments")
+                        .where("barberId", "==", businessId)
+                        .where("date", "==", date)
+                )
+            ];
+
+            if (quota) {
+                reads.push(tx.get(quota.phone.ref), tx.get(quota.ip.ref));
             }
 
-            if (idempotencyRef) {
-                const idemSnap = await tx.get(idempotencyRef);
-                if (idemSnap.exists) {
-                    const existingId = String(idemSnap.data()?.appointmentId || "").trim();
-                    if (existingId) {
-                        return existingId;
-                    }
+            const [
+                lockSnap,
+                idemSnap,
+                appointmentsSnap,
+                phoneSuccessSnap,
+                ipSuccessSnap
+            ] = await Promise.all(reads);
+
+            if (idempotencyRef && idemSnap.exists) {
+                const existingId = String(idemSnap.data()?.appointmentId || "").trim();
+                if (existingId) {
+                    return { kind: "replay", appointmentId: existingId };
                 }
             }
 
-            const appointmentsSnap = await tx.get(
-                db.collection("appointments")
-                    .where("barberId", "==", businessId)
-                    .where("date", "==", date)
-            );
+            let phoneState = null;
+            let ipState = null;
+
+            if (quota) {
+                phoneState = readSuccessCounterState(phoneSuccessSnap, {
+                    limit: quota.phone.limit,
+                    requestDay: quota.requestDay,
+                    resetAtMs: quota.resetAtMs,
+                    nowMs: quota.nowMs,
+                    scope: quota.phone.scope
+                });
+                assertSuccessQuotaAvailable(phoneState, quota.nowMs);
+
+                ipState = readSuccessCounterState(ipSuccessSnap, {
+                    limit: quota.ip.limit,
+                    requestDay: quota.requestDay,
+                    resetAtMs: quota.resetAtMs,
+                    nowMs: quota.nowMs,
+                    scope: quota.ip.scope
+                });
+                assertSuccessQuotaAvailable(ipState, quota.nowMs);
+            }
+
+            if (lockSnap.exists) {
+                const lockData = lockSnap.data() || {};
+                const linkedId = String(lockData.appointmentId || "").trim();
+                let lockIsActive = false;
+                if (linkedId) {
+                    const linkedSnap = await tx.get(db.collection("appointments").doc(linkedId));
+                    lockIsActive = linkedSnap.exists
+                        && isActiveAppointmentStatus(linkedSnap.data()?.status);
+                }
+                if (lockIsActive) {
+                    const err = new Error("slot_unavailable");
+                    err.code = "slot_taken";
+                    throw err;
+                }
+                tx.delete(lockRef);
+            }
 
             for (const docSnap of appointmentsSnap.docs) {
                 const appt = docSnap.data();
-                if (appt.time === time && isActiveAppointmentStatus(appt.status)) {
+                if (normalizeTimeHHmm(appt.time) === time && isActiveAppointmentStatus(appt.status)) {
                     const err = new Error("slot_unavailable");
                     err.code = "slot_taken";
                     throw err;
                 }
                 if (
-                    isActiveAppointmentStatus(appt.status)
+                    !ownerContext
+                    && normalizedPhone
+                    && isActiveAppointmentStatus(appt.status)
                     && normalizePhone(appt.phone) === normalizedPhone
                 ) {
                     const err = new Error("slot_unavailable");
                     err.code = "duplicate_phone_day";
                     throw err;
                 }
+            }
+
+            if (quota && phoneState && ipState) {
+                tx.set(quota.phone.ref, buildSuccessCounterWritePayload({
+                    count: phoneState.count + 1,
+                    limit: quota.phone.limit,
+                    scope: quota.phone.scope,
+                    type: quota.phone.type,
+                    requestDay: quota.requestDay,
+                    resetAtMs: phoneState.resetAtMs,
+                    businessId
+                }), { merge: true });
+
+                tx.set(quota.ip.ref, buildSuccessCounterWritePayload({
+                    count: ipState.count + 1,
+                    limit: quota.ip.limit,
+                    scope: quota.ip.scope,
+                    type: quota.ip.type,
+                    requestDay: quota.requestDay,
+                    resetAtMs: ipState.resetAtMs,
+                    businessId
+                }), { merge: true });
             }
 
             tx.set(lockRef, {
@@ -480,7 +567,23 @@ export async function createPublicAppointment(db, input, { clientIp = "unknown" 
                     createdAt: FieldValue.serverTimestamp()
                 });
             }
+
+            return { kind: "created", appointmentId: appointmentRef.id };
         });
+
+        if (txnResult?.kind === "replay") {
+            return {
+                ok: true,
+                appointmentId: txnResult.appointmentId,
+                businessId,
+                date,
+                time,
+                status: "confirmed",
+                idempotentReplay: true
+            };
+        }
+
+        committedAppointmentId = txnResult?.appointmentId || appointmentRef.id;
     } catch (err) {
         if (err?.code) throw err;
         const wrapped = new Error("internal_error");
@@ -497,24 +600,24 @@ export async function createPublicAppointment(db, input, { clientIp = "unknown" 
         time
     });
 
-    try {
-        await incrementBookingSuccessLimit(db, businessId, normalizedPhone, date);
-    } catch (err) {
-        console.warn("[create-appointment] success counter failed:", err?.code || "internal");
-    }
-
     return {
         ok: true,
-        appointmentId: appointmentRef.id,
+        appointmentId: committedAppointmentId,
         businessId,
-        notificationQueued: true
+        date,
+        time,
+        status: "confirmed",
+        notificationQueued: !ownerContext
     };
 }
 
-export function mapBookingErrorToHttp(err) {
+export function mapBookingErrorToHttp(err, { requestId = null } = {}) {
     const code = err?.code || "internal_error";
     if (code === "business_not_found") {
-        return { status: 404, body: { ok: false, code: "business_not_found" } };
+        return { status: 404, body: buildErrorBody("business_not_found", requestId) };
+    }
+    if (code === "rate_limit_config_error") {
+        return { status: 503, body: buildErrorBody("rate_limit_config_error", requestId) };
     }
     if (code === "rate_limited") {
         const retryAfterSeconds = Number.isFinite(err?.retryAfterSeconds)
@@ -530,30 +633,41 @@ export function mapBookingErrorToHttp(err) {
             status: 429,
             headers,
             body: {
-                ok: false,
-                code: "rate_limited",
+                ...buildErrorBody("rate_limited", requestId),
+                scope: err?.rateLimitScope || null,
+                limit: err?.rateLimitLimit ?? null,
+                remaining: 0,
                 retryAfterSeconds
             }
         };
+    }
+    if (code === "duplicate_phone_day") {
+        return { status: 409, body: buildErrorBody("duplicate_phone_day", requestId) };
     }
     if (
         code === "slot_taken"
         || code === "slot_blocked"
         || code === "day_closed"
-        || code === "duplicate_phone_day"
     ) {
-        return { status: 409, body: { ok: false, code: "slot_unavailable" } };
+        return { status: 409, body: buildErrorBody("slot_unavailable", requestId) };
+    }
+    if (code === "appointment_in_past") {
+        return { status: 400, body: buildErrorBody("appointment_in_past", requestId) };
+    }
+    if (code === "invalid_phone") {
+        return { status: 400, body: buildErrorBody("invalid_phone", requestId) };
+    }
+    if (code === "invalid_service") {
+        return { status: 400, body: buildErrorBody("invalid_service", requestId) };
     }
     if (
         code === "invalid_request"
-        || code === "invalid_phone"
-        || code === "invalid_service"
         || code === "invalid_slot"
         || code === "shop_passive"
         || code === "booking_closed"
         || code === "spam_detected"
     ) {
-        return { status: 400, body: { ok: false, code: "invalid_request" } };
+        return { status: 400, body: buildErrorBody("invalid_request", requestId) };
     }
-    return { status: 500, body: { ok: false, code: "internal_error" } };
+    return { status: 500, body: buildErrorBody("internal_error", requestId) };
 }

@@ -91,6 +91,7 @@ export async function callPrivilegedApi(routeKey, payload = {}, opts = { auth: t
         const err = new Error(data?.message || data?.error || "privileged_api_failed");
         err.code = data?.code || data?.error || "privileged_api_failed";
         err.status = response.status;
+        err.requestId = data?.requestId || null;
         throw err;
     }
 

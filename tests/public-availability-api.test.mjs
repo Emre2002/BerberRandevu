@@ -62,6 +62,6 @@ describe("public availability API route", () => {
         const src = readFileSync(resolve(ROOT, "api/public/availability.js"), "utf8");
         assert.match(src, /computePublicAvailability/);
         assert.doesNotMatch(src, /err\.stack/);
-        assert.match(src, /Cache-Control/);
+        assert.match(src, /no-store, no-cache, must-revalidate/);
     });
 });

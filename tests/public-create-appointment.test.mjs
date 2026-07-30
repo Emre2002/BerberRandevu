@@ -85,11 +85,19 @@ describe("booking validation helpers", () => {
     it("maps booking errors to stable HTTP codes", () => {
         assert.deepEqual(mapBookingErrorToHttp({ code: "business_not_found" }), {
             status: 404,
-            body: { ok: false, code: "business_not_found" }
+            body: {
+                ok: false,
+                code: "business_not_found",
+                message: "İşletme bilgileri bulunamadı."
+            }
         });
         assert.deepEqual(mapBookingErrorToHttp({ code: "slot_taken" }), {
             status: 409,
-            body: { ok: false, code: "slot_unavailable" }
+            body: {
+                ok: false,
+                code: "slot_unavailable",
+                message: "Bu saat kısa süre önce doldu. Lütfen başka bir saat seçin."
+            }
         });
         assert.deepEqual(mapBookingErrorToHttp({ code: "rate_limited", retryAfterSeconds: 30 }), {
             status: 429,
@@ -97,7 +105,15 @@ describe("booking validation helpers", () => {
                 "Retry-After": "30",
                 "RateLimit-Remaining": "0"
             },
-            body: { ok: false, code: "rate_limited", retryAfterSeconds: 30 }
+            body: {
+                ok: false,
+                code: "rate_limited",
+                message: "Çok fazla işlem yapıldı. Lütfen kısa süre sonra tekrar deneyin.",
+                scope: null,
+                limit: null,
+                remaining: 0,
+                retryAfterSeconds: 30
+            }
         });
     });
 });

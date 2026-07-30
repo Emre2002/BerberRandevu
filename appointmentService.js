@@ -2,8 +2,10 @@ import { db, isForceClientBookingQuery } from "./firebase-config.js";
 import { collection, addDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { upsertCustomerOnAppointment, normalizePhone } from "./customerService.js";
 import { notifyNewAppointment } from "./notificationService.js";
-import { submitPublicAppointment, PUBLIC_APPOINTMENT_ERROR_MESSAGES, formatRateLimitMessage } from "./publicAppointmentClient.js";
+import { submitPublicAppointment } from "./publicAppointmentClient.js";
 import { createOwnerAppointmentViaApi } from "./privilegedApiClient.js";
+import { mapOwnerApiError } from "./ownerBookingErrors.js";
+import { resolvePublicBookingUserMessage } from "./publicBookingErrors.js";
 
 const INACTIVE_APPOINTMENT_STATUSES = new Set([
     "cancelled",
@@ -60,29 +62,15 @@ export const BOOKING_ERROR_MESSAGES = {
 export const CF_BOOKING_ERROR_MESSAGES = BOOKING_ERROR_MESSAGES;
 
 function toUserFacingError(error) {
-    const code = String(error?.code || "");
-    if (code === "rate_limited" && Number.isFinite(error?.retryAfterSeconds)) {
-        const mapped = new Error(formatRateLimitMessage(error.retryAfterSeconds));
-        mapped.code = code;
+    const message = resolvePublicBookingUserMessage(error);
+    const mapped = new Error(message);
+    mapped.code = String(error?.code || "booking_failed");
+    mapped.status = error?.status ?? null;
+    mapped.requestId = error?.requestId || null;
+    if (Number.isFinite(error?.retryAfterSeconds)) {
         mapped.retryAfterSeconds = error.retryAfterSeconds;
-        return mapped;
     }
-    if (code && BOOKING_ERROR_MESSAGES[code]) {
-        const mapped = new Error(BOOKING_ERROR_MESSAGES[code]);
-        mapped.code = code;
-        return mapped;
-    }
-    if (code && PUBLIC_APPOINTMENT_ERROR_MESSAGES[code]) {
-        const mapped = new Error(PUBLIC_APPOINTMENT_ERROR_MESSAGES[code]);
-        mapped.code = code;
-        return mapped;
-    }
-    if (error instanceof Error && error.message) {
-        return error;
-    }
-    const fallback = new Error(BOOKING_ERROR_MESSAGES.booking_failed);
-    fallback.code = "booking_failed";
-    return fallback;
+    return mapped;
 }
 
 export function isActiveAppointmentStatus(status) {
@@ -170,7 +158,7 @@ export async function createAppointmentViaOwnerApi(payload) {
         musteriNotu: payload.musteriNotu || "",
         idempotencyKey: payload.idempotencyKey || ""
     });
-    return data?.appointmentId || null;
+    return data;
 }
 
 export async function createAppointmentWithEffects(params) {
@@ -195,7 +183,7 @@ export async function createAppointmentWithEffects(params) {
         try {
             return await createAppointmentViaOwnerApi(serverPayload);
         } catch (error) {
-            throw toUserFacingError(error);
+            throw mapOwnerApiError(error);
         }
     }
 
@@ -209,7 +197,8 @@ export async function createAppointmentWithEffects(params) {
     }
 
     try {
-        return await createAppointmentViaServerApi(serverPayload);
+        const result = await createAppointmentViaServerApi(serverPayload);
+        return result?.appointmentId ?? result;
     } catch (error) {
         throw toUserFacingError(error);
     }
