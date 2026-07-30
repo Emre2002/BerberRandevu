@@ -1,0 +1,17 @@
+{
+  "$schema": "https://raw.githubusercontent.com/firebase/firebase-tools/master/schema/firebase-config.json",
+  "firestore": {
+    "rules": "firestore.phase4b.rules"
+  },
+  "emulators": {
+    "auth": {
+      "host": "127.0.0.1",
+      "port": 9101
+    },
+    "firestore": {
+      "host": "127.0.0.1",
+      "port": 8082
+    },
+    "singleProjectMode": true
+  }
+}

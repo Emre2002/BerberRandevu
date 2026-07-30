@@ -8,7 +8,9 @@
   },
   "scripts": {
     "build": "node -e \"console.log('JS functions — build skipped')\"",
-    "serve": "firebase emulators:start --only functions,firestore",
+    "serve": "firebase emulators:start --config ../firebase.emulator.json --only functions,firestore,auth",
+    "seed:emulator": "node scripts/seed-emulator-membership.js",
+    "backfill:public-barbers": "node scripts/backfill-emulator-public-barbers.js",
     "deploy:functions": "firebase deploy --only functions"
   },
   "dependencies": {

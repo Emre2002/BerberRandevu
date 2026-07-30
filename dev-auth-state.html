@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Auth State Observer (Emulator Dev)</title>
+    <style>
+        body { font-family: system-ui, sans-serif; margin: 2rem; max-width: 40rem; }
+        .warn { color: #8a4b00; }
+        .state { font-size: 1.25rem; font-weight: 600; margin-top: 1rem; }
+        .meta { color: #444; margin-top: 0.5rem; }
+    </style>
+</head>
+<body>
+    <h1>Auth State Observer</h1>
+    <p class="warn">Development-only — localhost + <code>?authEmulator=1</code> gerekir.</p>
+    <div id="status" class="meta">Yükleniyor…</div>
+    <div id="guardState" class="state" hidden></div>
+    <div id="businessId" class="meta" hidden></div>
+    <pre id="diag" class="meta" hidden></pre>
+    <script type="module" src="./dev-auth-state.js"></script>
+</body>
+</html>

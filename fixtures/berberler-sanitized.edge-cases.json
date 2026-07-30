@@ -1,0 +1,16 @@
+[
+  { "slug": "fx-ascii-01", "username": "plain_ascii" },
+  { "slug": "fx-tr-dotless", "username": "IŞIK" },
+  { "slug": "fx-tr-dotted", "username": "İZMİR" },
+  { "slug": "fx-tr-lower-i", "username": "ışık" },
+  { "slug": "fx-pad", "username": "  padded_name  " },
+  { "slug": "fx-nfkc", "username": "ＴＥＳＴＵＳＥＲ" },
+  { "slug": "fx-no-user" },
+  { "slug": "fx-empty-user", "username": "" },
+  { "slug": "fx-invalid-at", "username": "bad@chars" },
+  { "slug": "fx-col-a", "username": "MIXEDcase" },
+  { "slug": "fx-col-b", "username": "mixedcase" },
+  { "slug": "fx-len-min", "username": "ab" },
+  { "slug": "fx-len-max-ok", "username": "abcdefghijklmnopqrstuvwxyz123456" },
+  { "slug": "fx-len-max-bad", "username": "abcdefghijklmnopqrstuvwxyz1234567" }
+]

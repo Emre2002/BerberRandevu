@@ -1,16 +1,10 @@
-import { fetchBarber } from "./firestoreService.js";
-import {
-    logoutBarberSession,
-    getBarberSlugFromUrl,
-    isSuperAdminLoggedIn,
-    requireBarberSession,
-    getLoggedInBarberSlug
-} from "./sessionAuth.js";
+import "./devEmulatorPage.js";
+import { authSignOut, bootstrapPassiveAuthFoundation } from "./authService.js";
+import { AUTH_GUARD_STATE } from "./authGuard.js";
+import { subscribeAuthorizedBusinessContext } from "./authorizedBusinessContext.js";
 
-const urlSlug = getBarberSlugFromUrl();
-const fromSuperAdminParam = new URLSearchParams(window.location.search).get("fromSuperAdmin") === "true";
-
-let superAdminMode = false;
+const urlSlug = new URLSearchParams(window.location.search).get("dukkan")
+    || new URLSearchParams(window.location.search).get("shop");
 const adminPanel = document.getElementById("adminPanel");
 const loginGate = document.getElementById("barberLoginGate");
 
@@ -29,93 +23,55 @@ function redirectToLogin() {
     if (returnUrl && returnUrl !== "/giris.html") {
         params.set("return", returnUrl);
     }
+    const current = new URLSearchParams(window.location.search);
+    if (current.get("authEmulator") === "1") params.set("authEmulator", "1");
+    if (current.get("useEmulators") === "1") params.set("useEmulators", "1");
     const qs = params.toString();
     window.location.replace(qs ? `giris.html?${qs}` : "giris.html");
 }
 
-function grantAdminAccess(slug, { superAdmin = false } = {}) {
-    superAdminMode = superAdmin;
+function grantAdminAccess(slug) {
     showAdminPanel();
-    const detail = { slug, superAdmin };
+    const detail = { slug, superAdmin: false };
     window.__barberAdminReadyDetail = detail;
     window.dispatchEvent(new CustomEvent("barberAdminReady", { detail }));
 }
 
-function injectSuperAdminBar(shopName) {
-    if (!adminPanel) return;
-    let bar = document.getElementById("superAdminModeBar");
-    if (!bar) {
-        bar = document.createElement("div");
-        bar.id = "superAdminModeBar";
-        bar.className = "sa-mode-bar";
-        bar.innerHTML = `
-            <span class="sa-mode-bar__text">👑 Super Admin modu: <strong id="saModeShop">Bu dükkan</strong> panelini denetliyorsunuz.</span>
-            <a href="super-admin.html" class="sa-mode-bar__btn">← Super Admin Paneline Dön</a>`;
-        adminPanel.prepend(bar);
-    }
-    const shopEl = document.getElementById("saModeShop");
-    if (shopEl && shopName) shopEl.textContent = shopName;
-}
-
-function enterSuperAdminMode(slug) {
-    injectSuperAdminBar(slug);
-    grantAdminAccess(slug, { superAdmin: true });
-    fetchBarber(slug).then((barber) => {
-        injectSuperAdminBar(barber?.name || slug);
-    });
-}
-
 function initGate() {
     hideLoginGate();
+    bootstrapPassiveAuthFoundation();
 
-    // 1) Geçerli Super Admin oturumu — berber session / şifre gerekmez; slug eşleşmesi aranmaz.
-    if (isSuperAdminLoggedIn()) {
-        if (!urlSlug) {
+    let authorized = false;
+    subscribeAuthorizedBusinessContext((context, snapshot) => {
+        if (authorized) return;
+        if (snapshot.authLoading || snapshot.membershipLoading) return;
+
+        if (!context || snapshot.guard?.state !== AUTH_GUARD_STATE.AUTHENTICATED_OWNER) {
             redirectToLogin();
             return;
         }
-        enterSuperAdminMode(urlSlug);
-        return;
-    }
 
-    // 2) fromSuperAdmin URL parametresi tek başına bypass değildir.
-    if (fromSuperAdminParam) {
-        redirectToLogin();
-        return;
-    }
-
-    // 3) Normal berber oturumu
-    if (!urlSlug) {
-        const sessionSlug = getLoggedInBarberSlug();
-        if (sessionSlug) {
-            window.location.replace(`admin.html?dukkan=${encodeURIComponent(sessionSlug)}`);
+        if (urlSlug && urlSlug !== context.businessId) {
+            const params = new URLSearchParams();
+            params.set("dukkan", context.businessId);
+            const current = new URLSearchParams(window.location.search);
+            if (current.get("authEmulator") === "1") params.set("authEmulator", "1");
+            if (current.get("useEmulators") === "1") params.set("useEmulators", "1");
+            window.location.replace(`admin.html?${params.toString()}`);
             return;
         }
-        redirectToLogin();
-        return;
-    }
 
-    const sessionSlug = requireBarberSession(urlSlug);
-    if (sessionSlug) {
-        grantAdminAccess(sessionSlug, { superAdmin: false });
-        return;
-    }
-
-    const validSessionSlug = getLoggedInBarberSlug();
-    if (validSessionSlug && validSessionSlug !== urlSlug) {
-        window.location.replace(`admin.html?dukkan=${encodeURIComponent(validSessionSlug)}`);
-        return;
-    }
-
-    redirectToLogin();
+        authorized = true;
+        grantAdminAccess(context.businessId);
+    });
 }
 
-document.getElementById("btnLogout")?.addEventListener("click", () => {
-    if (superAdminMode) {
-        window.location.href = "super-admin.html";
-        return;
+document.getElementById("btnLogout")?.addEventListener("click", async () => {
+    try {
+        await authSignOut();
+    } catch {
+        /* fail-closed: Firebase signOut reddedilse bile oturum temizlenir */
     }
-    logoutBarberSession();
     redirectToLogin();
 });
 

@@ -1,2 +1,20 @@
 
+.local-private/
+
 functions/node_modules/
+
+.env
+.env.*
+!.env.example
+*-debug.log
+firebase-debug.log*
+functions-debug.log*
+service-account*.json
+*serviceAccount*.json
+credentials*.json
+secrets/
+.gcloud/
+.vercel
+.env*
+
+node_modules/

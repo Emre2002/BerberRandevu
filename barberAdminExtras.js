@@ -55,25 +55,35 @@ export function initBarberMessaging(barberSlug, showToast) {
     }
 
     async function loadCustomers() {
-        const customers = await fetchCustomersByBarber(barberSlug);
-        if (customerCountEl) customerCountEl.textContent = customers.length;
-        return customers;
+        try {
+            const customers = await fetchCustomersByBarber(barberSlug);
+            if (customerCountEl) customerCountEl.textContent = customers.length;
+            return customers;
+        } catch (err) {
+            console.warn("Müşteri listesi yüklenemedi.");
+            if (customerCountEl) customerCountEl.textContent = "0";
+            return [];
+        }
     }
 
     async function loadHistory() {
         if (!historyEl) return;
-        const history = await fetchCampaignsByBarber(barberSlug);
-        if (!history.length) {
-            historyEl.innerHTML = `<p class="msg-empty">Henüz mesaj gönderilmedi.</p>`;
-            return;
-        }
-        historyEl.innerHTML = history.map((c) => {
-            const date = c.createdAt?.toDate?.() ? c.createdAt.toDate().toLocaleString("tr-TR") : "—";
-            return `<div class="msg-history-item">
+        try {
+            const history = await fetchCampaignsByBarber(barberSlug);
+            if (!history.length) {
+                historyEl.innerHTML = `<p class="msg-empty">Henüz mesaj gönderilmedi.</p>`;
+                return;
+            }
+            historyEl.innerHTML = history.map((c) => {
+                const date = c.createdAt?.toDate?.() ? c.createdAt.toDate().toLocaleString("tr-TR") : "—";
+                return `<div class="msg-history-item">
                 <div class="msg-history-item__meta">${date} · ${c.recipientCount} alıcı</div>
                 <div class="msg-history-item__text">${c.message}</div>
             </div>`;
-        }).join("");
+            }).join("");
+        } catch {
+            historyEl.innerHTML = `<p class="msg-empty">Mesaj geçmişi yüklenemedi.</p>`;
+        }
     }
 
     templateSelect.addEventListener("change", updatePreview);
@@ -100,8 +110,8 @@ export function initBarberMessaging(barberSlug, showToast) {
     });
 
     updatePreview();
-    loadCustomers();
-    loadHistory();
+    void loadCustomers();
+    void loadHistory();
 }
 
 export function initAdminTabs() {

@@ -1,9 +1,20 @@
-import { resolveBarberLogin } from "./firestoreService.js";
+import "./devEmulatorPage.js";
+import { bootstrapPassiveAuthFoundation } from "./authService.js";
+import { subscribeAuthorizedBusinessContext } from "./authorizedBusinessContext.js";
+import { withDevEmulatorQuery } from "./devEmulatorGate.js";
 import {
-    loginBarberSession,
-    isBarberSessionValid,
-    getLoggedInBarberSlug
-} from "./sessionAuth.js";
+    shouldUseEmulatorAuthLogin,
+    signInWithEmulatorAuth,
+    EMULATOR_AUTH_LOGIN_ERROR,
+    EMULATOR_AUTH_UNAVAILABLE_ERROR
+} from "./emulatorAuthLogin.js";
+import {
+    signInWithProductionOwnerAuth,
+    PRODUCTION_AUTH_LOGIN_ERROR,
+    PRODUCTION_AUTH_UNAVAILABLE_ERROR
+} from "./productionAuthLogin.js";
+
+bootstrapPassiveAuthFoundation();
 
 const LOGIN_ERROR = "Kullanıcı adı veya şifre hatalı.";
 
@@ -11,12 +22,23 @@ const form = document.getElementById("girisForm");
 const errorEl = document.getElementById("girisError");
 const submitBtn = document.getElementById("girisSubmitBtn");
 
-if (isBarberSessionValid()) {
-    const slug = getLoggedInBarberSlug();
-    if (slug) {
-        window.location.replace(`admin.html?dukkan=${encodeURIComponent(slug)}`);
+function redirectAfterAuth(businessId) {
+    const params = new URLSearchParams(window.location.search);
+    const returnUrl = params.get("return");
+    if (returnUrl) {
+        window.location.replace(withDevEmulatorQuery(returnUrl));
+        return;
     }
+    window.location.replace(
+        withDevEmulatorQuery(`admin.html?dukkan=${encodeURIComponent(businessId)}`)
+    );
 }
+
+subscribeAuthorizedBusinessContext((context) => {
+    if (context?.businessId) {
+        redirectAfterAuth(context.businessId);
+    }
+});
 
 form?.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -31,15 +53,33 @@ form?.addEventListener("submit", async (e) => {
     }
 
     try {
-        const { slug, barber } = await resolveBarberLogin(username, password);
-        loginBarberSession({
-            slug,
-            barberName: barber.name || barber.isim || slug
-        });
-        window.location.href = `admin.html?dukkan=${encodeURIComponent(slug)}`;
-    } catch {
+        if (shouldUseEmulatorAuthLogin()) {
+            const { businessId } = await signInWithEmulatorAuth(username, password);
+            redirectAfterAuth(businessId);
+            return;
+        }
+
+        const { businessId } = await signInWithProductionOwnerAuth(username, password);
+        redirectAfterAuth(businessId);
+    } catch (err) {
         if (errorEl) {
-            errorEl.textContent = LOGIN_ERROR;
+            if (shouldUseEmulatorAuthLogin()) {
+                const msg =
+                    err?.code === "functions/unavailable" ||
+                    err?.message === "emulator_auth_callable_unavailable"
+                        ? EMULATOR_AUTH_UNAVAILABLE_ERROR
+                        : EMULATOR_AUTH_LOGIN_ERROR;
+                errorEl.textContent = msg;
+            } else {
+                const msg =
+                    err?.message === "production_auth_invalid_response" ||
+                    err?.code === "auth_failed" ||
+                    err?.code === "auth/wrong-password" ||
+                    err?.code === "auth/invalid-credential"
+                        ? PRODUCTION_AUTH_LOGIN_ERROR
+                        : PRODUCTION_AUTH_UNAVAILABLE_ERROR;
+                errorEl.textContent = msg;
+            }
             errorEl.hidden = false;
         }
     } finally {

@@ -1,5 +1,9 @@
 import { db } from "./firebase-config.js";
-import { getBarberBlockReason, fetchPublicBarber } from "./firestoreService.js";
+import { getBarberBlockReason, fetchPublicBarber, fetchBarber } from "./firestoreService.js";
+import {
+    getAuthorizedBusinessContextWithFreshToken,
+    clearAuthorizedBusinessContext
+} from "./authorizedBusinessContext.js";
 import { createAppointmentWithEffects, findActiveAppointmentByPhoneOnDay } from "./appointmentService.js";
 import { normalizePhone } from "./customerService.js";
 import {
@@ -28,6 +32,24 @@ import {
     isWithinWorkingHours,
     sortSlotTimes
 } from "./workingHoursService.js";
+import {
+    fetchPublicAvailability,
+    checkPublicPhoneDuplicate,
+    mapPublicAvailabilityToDayData,
+    invalidateAvailabilityMemoryCache,
+    nextAvailabilityRequestSequence
+} from "./publicAvailabilityClient.js";
+import {
+    getIstanbulTodayYmd,
+    isPastAppointmentSlot,
+    normalizeTimeHHmm
+} from "./appointmentDateTime.js";
+import {
+    resolvePublicBookingUserMessage,
+    isPublicSlotConflictError,
+    isPublicDuplicatePhoneError
+} from "./publicBookingErrors.js";
+import { OWNER_BOOKING_ERROR_MESSAGES } from "./ownerBookingErrors.js";
 import { 
     doc,
     getDoc,
@@ -49,8 +71,27 @@ const isCustomerPageEarly = typeof document !== "undefined" && document.getEleme
 const isAdminPageEarly = typeof document !== "undefined" && document.getElementById?.("calendarGrid");
 let aktifDukkan = urlSlug || (isCustomerPageEarly ? "x-men" : "");
 
+/** Admin panelinde membership'ten gelen güvenilir tenant kimliği. */
+let authorizedAdminBusinessId = null;
+
 /** Admin panelinde abonelik kilidi için önbellek (ekstra Firestore read yok). */
 let cachedBarberData = null;
+
+function getTenantBusinessId() {
+    if (isAdminPageEarly) {
+        if (!authorizedAdminBusinessId) {
+            throw Object.assign(new Error("authorized_business_context_required"), {
+                code: "permission-denied"
+            });
+        }
+        return authorizedAdminBusinessId;
+    }
+    return aktifDukkan;
+}
+
+function isCustomerBookingPage() {
+    return Boolean(isCustomerPageEarly) && !isAdminPageEarly;
+}
 
 function escapeHtml(str) {
     return String(str)
@@ -203,13 +244,12 @@ async function dukkanArayuzunuDinamikYap() {
                 return false;
             }
         } else {
-            const dukkanSnap = await getDoc(doc(db, "berberler", aktifDukkan));
-            if (!dukkanSnap.exists()) {
-                console.log("Firebase'de dükkan bulunamadı:", aktifDukkan);
+            veri = await fetchBarber(getTenantBusinessId());
+            if (!veri) {
+                console.log("Firebase'de dükkan bulunamadı:", getTenantBusinessId());
                 return true;
             }
-            veri = dukkanSnap.data();
-            cachedBarberData = { slug: aktifDukkan, ...veri };
+            cachedBarberData = veri;
         }
 
         if (veri) {
@@ -336,7 +376,7 @@ function formatDateLocal(date) {
 }
 
 function getToday() {
-    return formatDateLocal(new Date());
+    return getIstanbulTodayYmd();
 }
 
 /** Müşteri randevu ekranında tarih gösterimi (YYYY-MM-DD → GG.AA.YYYY). */
@@ -373,10 +413,42 @@ function showError(container, message) {
 const TECHNICAL_UI_PATTERN =
     /firebase|firestore|console|token|app\s*check|cfbooking|forceclient|super\s*admin|cloud\s*function|rate\s*limit|functions\//i;
 
+function adminAccessErrorMessage(err) {
+    const marker = String(err?.message || err?.code || "");
+    if (marker === "authorized_business_context_required") {
+        return "İşletme yetkiniz bulunamadı. Lütfen tekrar giriş yapın.";
+    }
+    if (marker === "authorized_business_context_mismatch") {
+        return "Bu işletmeye erişim yetkiniz bulunmuyor.";
+    }
+    if (marker === "authorized_business_token_refresh_failed") {
+        return "Oturum doğrulanamadı. Lütfen tekrar giriş yapın.";
+    }
+    return adminFirestoreErrorMessage(err);
+}
+
+function adminFirestoreErrorMessage(err) {
+    const code = String(err?.code || "");
+    if (code === "permission-denied" || code.includes("permission-denied")) {
+        return "Randevu takvimine erişilemiyor. Lütfen tekrar giriş yapın.";
+    }
+    if (code === "unavailable" || code.includes("unavailable")) {
+        return "Sunucuya ulaşılamıyor. İnternet bağlantınızı kontrol edip tekrar deneyin.";
+    }
+    const msg = err?.message || "";
+    if (msg && !TECHNICAL_UI_PATTERN.test(msg)) {
+        return msg;
+    }
+    return "Bir sorun oluştu. Lütfen tekrar deneyin.";
+}
+
 function firestoreErrorMessage(err) {
+    if (isAdminPageEarly) {
+        return adminFirestoreErrorMessage(err);
+    }
     const code = err?.code || "";
     if (code === "permission-denied") {
-        return "Firestore erişim izni reddedildi. Firebase Console → Firestore → Rules bölümünden okuma/yazma izinlerini kontrol edin.";
+        return "Şu anda bilgilere erişilemiyor. Lütfen daha sonra tekrar deneyin.";
     }
     if (code === "unavailable") {
         return "Firebase sunucusuna ulaşılamıyor. İnternet bağlantınızı kontrol edin.";
@@ -386,6 +458,12 @@ function firestoreErrorMessage(err) {
 
 /** Müşteri randevu sayfası — teknik terim içermeyen hata metinleri. */
 function customerErrorMessage(err, preferred) {
+    if (isCustomerBookingPage()) {
+        if (preferred && !TECHNICAL_UI_PATTERN.test(preferred)) {
+            return preferred;
+        }
+        return resolvePublicBookingUserMessage(err);
+    }
     const msg = preferred || err?.message || "";
     if (msg && !TECHNICAL_UI_PATTERN.test(msg)) {
         return msg;
@@ -418,8 +496,12 @@ function stripCustomerAdminHints() {
 }
 
 async function fetchNewAppointments(date) {
-    // Kanka buradaki yolu ana appointments koleksiyonuna çevirdik ki takvim kilitlenmesin
-    const q = query(collection(db, "appointments"), where("date", "==", date), where("barberId", "==", aktifDukkan));
+    const tenantId = getTenantBusinessId();
+    const q = query(
+        collection(db, "appointments"),
+        where("date", "==", date),
+        where("barberId", "==", tenantId)
+    );
     const snap = await getDocs(q);
     const map = {};
     snap.forEach(d => {
@@ -432,7 +514,8 @@ async function fetchNewAppointments(date) {
 }
 
 async function fetchLegacyDayDoc(date, slots) {
-    const snap = await getDoc(doc(db, "berberler", aktifDukkan, "appointments", date));
+    const tenantId = getTenantBusinessId();
+    const snap = await getDoc(doc(db, "berberler", tenantId, "appointments", date));
     const appointments = {};
     const blocked = new Set();
     let dayClosed = false;
@@ -478,7 +561,8 @@ async function fetchBlockedSlotsCollection(date, slots) {
     const slotList = slots ?? getVisibleSlots();
 
     try {
-        const q = query(collection(db, "berberler", aktifDukkan, "blockedSlots"), where("date", "==", date));
+        const tenantId = getTenantBusinessId();
+        const q = query(collection(db, "berberler", tenantId, "blockedSlots"), where("date", "==", date));
         const snap = await getDocs(q);
         snap.forEach(d => {
             const data = d.data();
@@ -492,7 +576,8 @@ async function fetchBlockedSlotsCollection(date, slots) {
     } catch (hata) {
         console.warn("Koleksiyon çekilirken hata oluştu, döküman bazlı kontrol deneniyor:", hata);
         try {
-            const dayRef = doc(db, "berberler", aktifDukkan, "blockedSlots", blockedSlotId(date, "ALL"));
+            const tenantId = getTenantBusinessId();
+            const dayRef = doc(db, "berberler", tenantId, "blockedSlots", blockedSlotId(date, "ALL"));
             const daySnap = await getDoc(dayRef);
             if (daySnap.exists()) {
                 dayClosed = true;
@@ -501,7 +586,7 @@ async function fetchBlockedSlotsCollection(date, slots) {
             }
 
             await Promise.all(slotList.map(async (time) => {
-                const ref = doc(db, "berberler", aktifDukkan, "blockedSlots", blockedSlotId(date, time));
+                const ref = doc(db, "berberler", tenantId, "blockedSlots", blockedSlotId(date, time));
                 const snap = await getDoc(ref);
                 if (snap.exists()) blocked.add(time);
             }));
@@ -522,13 +607,63 @@ function invalidateDay(date) {
     for (const key of [...dayDataCache.keys()]) {
         if (key.startsWith(`${date}|`)) dayDataCache.delete(key);
     }
+    if (isCustomerBookingPage()) {
+        invalidateAvailabilityMemoryCache(getTenantBusinessId(), date);
+    }
+}
+
+function applyBookedSlotToDayCache(date, time, appointment = { status: "confirmed", legacy: false }) {
+    const normalizedTime = normalizeTimeHHmm(time);
+    if (!normalizedTime) return;
+
+    const cacheKey = dayCacheKey(date);
+    const cached = dayDataCache.get(cacheKey);
+    if (cached?.data) {
+        cached.data.appointments[normalizedTime] = appointment;
+        cached.ts = Date.now();
+        return;
+    }
+
+    dayDataCache.set(cacheKey, {
+        ts: Date.now(),
+        data: {
+            appointments: { [normalizedTime]: appointment },
+            blocked: new Set(),
+            dayClosed: false
+        }
+    });
 }
 
 function invalidateAllDayCache() {
     dayDataCache.clear();
 }
 
-async function getDayData(date, { force = false } = {}) {
+let activeAvailabilitySequence = 0;
+
+async function fetchPublicDayData(date, { force = false, sequence = null } = {}) {
+    const cacheKey = dayCacheKey(date);
+
+    if (!force) {
+        const cached = dayDataCache.get(cacheKey);
+        if (cached && Date.now() - cached.ts < DAY_CACHE_TTL_MS) {
+            return cached.data;
+        }
+    }
+
+    const apiPayload = await fetchPublicAvailability(getTenantBusinessId(), date, {
+        force,
+        sequence: sequence ?? nextAvailabilityRequestSequence()
+    });
+    const data = mapPublicAvailabilityToDayData(apiPayload);
+    dayDataCache.set(cacheKey, { ts: Date.now(), data, sequence: sequence ?? activeAvailabilitySequence });
+    return data;
+}
+
+async function getDayData(date, { force = false, sequence = null } = {}) {
+    if (isCustomerBookingPage()) {
+        return fetchPublicDayData(date, { force, sequence });
+    }
+
     if (!db) {
         throw new Error("Firebase bağlantısı kurulamadı.");
     }
@@ -600,6 +735,23 @@ function countAvailableSlots(appointments, blocked, dayClosed) {
     return getVisibleSlots().filter(t => !appointments[t] && !blocked.has(t)).length;
 }
 
+function renderSlotsChecking(container, date) {
+    container.innerHTML = "";
+    const visibleSlots = getVisibleSlots();
+    if (!visibleSlots.length) {
+        container.innerHTML =
+            '<div class="slots-empty">Bu gün için tanımlı çalışma saati bulunmuyor.</div>';
+        return;
+    }
+    visibleSlots.forEach((time) => {
+        const slotEl = document.createElement("div");
+        slotEl.classList.add("slot", "slot--checking");
+        slotEl.textContent = time;
+        slotEl.title = "Uygunluk kontrol ediliyor";
+        container.appendChild(slotEl);
+    });
+}
+
 function renderSlots(container, date, appointments, blocked, dayClosed, onSelect) {
     container.innerHTML = "";
 
@@ -669,7 +821,7 @@ function setRandomMotivationQuote() {
     el.textContent = `"${quote}"`;
 }
 
-function initCustomerPage() {
+async function initCustomerPage() {
     const slotsContainer = document.getElementById("slotsContainer");
     if (!slotsContainer) return;
 
@@ -683,6 +835,7 @@ function initCustomerPage() {
     let selectedSlot = null;
     let phoneDuplicateBlocked = false;
     let bookingInProgress = false;
+    let activeIdempotencyKey = null;
     let lastSubmitAt = 0;
     const bookingFormReadyAt = Date.now();
     const MIN_FORM_MS = 3000;
@@ -710,6 +863,18 @@ function initCustomerPage() {
         try {
             localStorage.setItem(getPhoneCooldownKey(phone), String(Date.now() + PHONE_COOLDOWN_MS));
         } catch { /* gizli mod */ }
+    }
+
+    function resetBookingIdempotencyKey() {
+        activeIdempotencyKey = null;
+    }
+
+    function getOrCreateBookingIdempotencyKey() {
+        if (activeIdempotencyKey) return activeIdempotencyKey;
+        activeIdempotencyKey = typeof crypto !== "undefined" && crypto.randomUUID
+            ? crypto.randomUUID()
+            : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        return activeIdempotencyKey;
     }
 
     function finishBookingSubmit() {
@@ -884,6 +1049,20 @@ function initCustomerPage() {
             return false;
         }
 
+        if (isCustomerBookingPage()) {
+            try {
+                phoneDuplicateBlocked = await checkPublicPhoneDuplicate({
+                    businessSlug: getTenantBusinessId(),
+                    date,
+                    phone
+                });
+            } catch {
+                phoneDuplicateBlocked = false;
+            }
+            if (phoneDuplicateBlocked) showDuplicateAppointmentModal();
+            return phoneDuplicateBlocked;
+        }
+
         const { appointments } = await getDayData(date, { force });
         const existing = findActiveAppointmentByPhoneOnDay({ appointments, phone });
         phoneDuplicateBlocked = Boolean(existing);
@@ -934,6 +1113,7 @@ function initCustomerPage() {
         document.querySelectorAll(".slot--selected").forEach(s => s.classList.remove("slot--selected"));
         slotEl.classList.add("slot--selected");
         selectedSlot = time;
+        resetBookingIdempotencyKey();
         updateBookButton();
     }
 
@@ -966,22 +1146,37 @@ function initCustomerPage() {
         const date = belirliTarih || dateInput?.value;
         if (!date) return;
 
-        slotsContainer.innerHTML = '<div class="slots-loading">Saatler yükleniyor...</div>';
+        const requestSequence = nextAvailabilityRequestSequence();
+        activeAvailabilitySequence = requestSequence;
+
+        renderSlotsChecking(slotsContainer, date);
         selectedSlot = null;
         updateBookButton();
 
         try {
-            const { appointments, blocked, dayClosed } = await getDayData(date);
+            const { appointments, blocked, dayClosed } = await getDayData(date, {
+                sequence: requestSequence
+            });
+
+            if (requestSequence !== activeAvailabilitySequence) {
+                return;
+            }
 
             if (date === getToday() && availableCountEl) {
                 availableCountEl.textContent = countAvailableSlots(appointments, blocked, dayClosed);
             }
 
-            renderSlots(slotsContainer, date, appointments, blocked, false, onSlotSelect);
+            renderSlots(slotsContainer, date, appointments, blocked, dayClosed, onSlotSelect);
         } catch (err) {
-            console.error("Saatler yüklenemedi:", err);
-            showError(slotsContainer, customerErrorMessage(err));
-            showToast("Saatler yüklenemedi.", "error");
+            if (err?.code === "availability_request_aborted" || err?.code === "availability_response_stale") {
+                return;
+            }
+            console.error("availability_load_failed", err?.code || "unknown");
+            const userMessage = isCustomerBookingPage()
+                ? "Saat bilgileri şu anda yüklenemiyor. Lütfen tekrar deneyin."
+                : customerErrorMessage(err);
+            showError(slotsContainer, userMessage);
+            showToast(userMessage, "error");
         }
     }
     
@@ -989,6 +1184,7 @@ function initCustomerPage() {
         dateInput.addEventListener("change", () => {
             selectedSlot = null;
             phoneDuplicateBlocked = false;
+            resetBookingIdempotencyKey();
             updateBookButton();
             loadAvailableSlots();
             checkPhoneDuplicateForSelectedDate();
@@ -1006,7 +1202,10 @@ function initCustomerPage() {
         const el = document.getElementById(id);
         if (el) {
             el.addEventListener("input", () => {
-                if (id === "customerPhone") phoneDuplicateBlocked = false;
+                if (id === "customerPhone") {
+                    phoneDuplicateBlocked = false;
+                    resetBookingIdempotencyKey();
+                }
                 updateBookButton();
             });
             el.addEventListener("change", updateBookButton);
@@ -1065,7 +1264,13 @@ function initCustomerPage() {
                     return;
                 }
 
-                const duplicate = findActiveAppointmentByPhoneOnDay({ appointments, phone });
+                const duplicate = isCustomerBookingPage()
+                    ? await checkPublicPhoneDuplicate({
+                        businessSlug: getTenantBusinessId(),
+                        date,
+                        phone
+                    })
+                    : Boolean(findActiveAppointmentByPhoneOnDay({ appointments, phone }));
                 if (duplicate) {
                     phoneDuplicateBlocked = true;
                     showDuplicateAppointmentModal();
@@ -1086,9 +1291,27 @@ function initCustomerPage() {
                     time: selectedSlot,
                     status: "confirmed",
                     musteriNotu,
-                    website: document.getElementById("bookingHoneypot")?.value?.trim() || ""
+                    website: document.getElementById("bookingHoneypot")?.value?.trim() || "",
+                    idempotencyKey: getOrCreateBookingIdempotencyKey()
                 });
 
+                const bookedTime = selectedSlot;
+                applyBookedSlotToDayCache(date, bookedTime, { legacy: false, status: "confirmed" });
+                if (slotsContainer && dateInput?.value === date) {
+                    const cachedDay = dayDataCache.get(dayCacheKey(date))?.data;
+                    if (cachedDay) {
+                        renderSlots(
+                            slotsContainer,
+                            date,
+                            cachedDay.appointments,
+                            cachedDay.blocked,
+                            cachedDay.dayClosed,
+                            onSlotSelect
+                        );
+                    }
+                }
+
+                resetBookingIdempotencyKey();
                 setPhoneCooldown(phone);
 
                 const successDetails = {
@@ -1114,6 +1337,21 @@ function initCustomerPage() {
                 await loadTodayCount();
             } catch (err) {
                 console.error(err);
+                const conflictDate = dateInput?.value;
+
+                if (isCustomerBookingPage() && isPublicSlotConflictError(err)) {
+                    selectedSlot = null;
+                    if (conflictDate) {
+                        invalidateDay(conflictDate);
+                    }
+                    updateBookButton();
+                    await loadAvailableSlots(conflictDate);
+                } else if (isCustomerBookingPage() && isPublicDuplicatePhoneError(err)) {
+                    phoneDuplicateBlocked = true;
+                    showDuplicateAppointmentModal();
+                    updateBookButton();
+                }
+
                 showToast(customerErrorMessage(err), "error");
             } finally {
                 finishBookingSubmit();
@@ -1121,8 +1359,7 @@ function initCustomerPage() {
         });
     }
 
-    loadAvailableSlots();
-    loadTodayCount();
+    await Promise.all([loadAvailableSlots(), loadTodayCount()]);
 }
 
 function initAdminPage() {
@@ -1240,6 +1477,91 @@ function initAdminPage() {
 
     let currentMonday = getMondayOfWeek(new Date());
     let weekData = null;
+    let adminSaveInProgress = false;
+    let adminActiveIdempotencyKey = null;
+    let adminCachedToday = getToday();
+
+    function ensureAdminTodayFresh() {
+        const today = getToday();
+        if (today !== adminCachedToday) {
+            adminCachedToday = today;
+            return true;
+        }
+        return false;
+    }
+
+    function isCalendarSlotPast(date, time) {
+        return isPastAppointmentSlot(date, time);
+    }
+
+    function findAppointmentForSlot(date, time) {
+        if (!weekData?.appointments?.[date]) return null;
+        const normalizedTime = normalizeTimeHHmm(time);
+        return weekData.appointments[date][time]
+            || weekData.appointments[date][normalizedTime]
+            || null;
+    }
+
+    function resolveCalendarCellPresentation(date, time) {
+        if (!weekData?.appointments?.[date]) {
+            return isCalendarSlotPast(date, time)
+                ? { kind: "past-empty" }
+                : { kind: "available" };
+        }
+
+        if (weekData.dayClosed[date]) {
+            return { kind: "closed" };
+        }
+
+        const normalizedTime = normalizeTimeHHmm(time);
+        if (weekData.blocked[date]?.has(time) || weekData.blocked[date]?.has(normalizedTime)) {
+            return { kind: "closed" };
+        }
+
+        const appt = findAppointmentForSlot(date, time);
+        if (appt) {
+            return { kind: "booked", appt };
+        }
+
+        if (isCalendarSlotPast(date, time)) {
+            return { kind: "past-empty" };
+        }
+
+        return { kind: "available" };
+    }
+
+    function calendarCellClassName(kind) {
+        if (kind === "past-empty") return "calendar-cell--past-empty";
+        return `calendar-cell--${kind}`;
+    }
+
+    function getAdminServiceOptionsHtml() {
+        const services = getEffectiveSelectedServices(cachedBarberData);
+        const options = ['<option value="">Hizmet seçiniz...</option>'];
+        const list = services.length
+            ? services
+            : ["Saç Kesimi", "Saç + Sakal", "Sakal", "Çocuk Tıraşı"];
+        list.forEach((service) => options.push(`<option>${service}</option>`));
+        return options.join("");
+    }
+
+    function adminOwnerErrorMessage(err) {
+        const code = String(err?.code || "");
+        if (OWNER_BOOKING_ERROR_MESSAGES[code]) {
+            let message = OWNER_BOOKING_ERROR_MESSAGES[code];
+            if (err?.requestId) {
+                message += ` (Ref: ${String(err.requestId).slice(0, 8)})`;
+            }
+            return message;
+        }
+        return adminFirestoreErrorMessage(err);
+    }
+
+    function applyLocalAdminAppointment(date, time, appt) {
+        if (!weekData?.appointments?.[date]) return;
+        weekData.appointments[date][normalizeTimeHHmm(time)] = appt;
+        drawCalendar();
+    }
 
     const weekLabel = document.getElementById("weekLabel");
     const dayActions = document.getElementById("dayActions");
@@ -1280,17 +1602,24 @@ function initAdminPage() {
         if (confirmBtn) confirmBtn.disabled = true;
 
         try {
-            await archiveAndDeleteAppointment({
-                barberSlug: aktifDukkan,
+            const result = await archiveAndDeleteAppointment({
                 appointment: appt,
                 deletedBy: getDeletedByUser(),
                 deletedByMode: "adminPanel"
             });
             closeDeleteConfirmModal();
             closeModal();
-            showToast("Randevu silindi ve 7 gün boyunca arşive taşındı.");
-            await refreshDay(date || appt.date);
-            await deletedPanel.refresh();
+            const successMessage = result?.idempotent || result?.reconciled
+                ? "Randevu daha önce arşive alınmış."
+                : "Randevu arşive alındı.";
+            showToast(successMessage);
+            try {
+                await refreshDay(date || appt.date);
+                await deletedPanel.refresh();
+            } catch (refreshErr) {
+                console.warn("Takvim yenileme hatası:", refreshErr);
+                showToast("Randevu arşive alındı. Takvim yenilenemedi; sayfayı yenileyin.", "error");
+            }
         } catch (err) {
             showToast(err.message || firestoreErrorMessage(err), "error");
         } finally {
@@ -1362,9 +1691,13 @@ function initAdminPage() {
 
     async function handleCellClick(date, time) {
         try {
-            const state = getCellState(date, time);
+            const presentation = resolveCalendarCellPresentation(date, time);
 
-            if (state === "available") {
+            if (presentation.kind === "past-empty") {
+                return;
+            }
+
+            if (presentation.kind === "available") {
                 openModal("Boş Randevu", `
                     <p style="font-size:0.9rem;color:var(--text-secondary);margin-bottom:16px;">
                         <strong>${formatDisplayDate(date)} — ${time}</strong> için ne yapmak istersiniz?
@@ -1380,11 +1713,7 @@ function initAdminPage() {
                     <div class="form-group" style="margin-top:10px;">
                         <label for="adminCustService">Hizmet</label>
                         <select id="adminCustService" style="width:100%;padding:10px 12px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-primary);font-size:0.875rem;font-family:inherit;appearance:none;">
-                            <option value="">Hizmet seçiniz...</option>
-                            <option>Saç Kesimi</option>
-                            <option>Saç + Sakal</option>
-                            <option>Sakal</option>
-                            <option>Çocuk Tıraşı</option>
+                            ${getAdminServiceOptionsHtml()}
                         </select>
                     </div>
                 `, `
@@ -1400,18 +1729,35 @@ function initAdminPage() {
                 });
 
                 document.getElementById("modalSaveAppt").addEventListener("click", async () => {
+                    if (adminSaveInProgress) return;
+
                     const customerName = document.getElementById("adminCustName").value.trim();
                     const phone = document.getElementById("adminCustPhone").value.trim();
                     const service = document.getElementById("adminCustService").value;
+                    const saveBtn = document.getElementById("modalSaveAppt");
 
                     if (!customerName) {
                         showToast("Lütfen müşteri adını girin.", "error");
                         return;
                     }
 
+                    if (isCalendarSlotPast(date, time)) {
+                        showToast("Geçmiş bir tarih veya saate randevu oluşturulamaz.", "error");
+                        return;
+                    }
+
+                    adminSaveInProgress = true;
+                    saveBtn.disabled = true;
+                    saveBtn.textContent = "Kaydediliyor...";
+
                     try {
-                        // Kanka admin panelinden girilen randevuyu da ana koleksiyona eşitliyoruz
-                        await createAppointmentWithEffects({
+                        if (!adminActiveIdempotencyKey) {
+                            adminActiveIdempotencyKey = typeof crypto !== "undefined" && crypto.randomUUID
+                                ? crypto.randomUUID()
+                                : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+                        }
+
+                        const result = await createAppointmentWithEffects({
                             barberId: aktifDukkan,
                             customerName,
                             phone: phone || "—",
@@ -1420,19 +1766,38 @@ function initAdminPage() {
                             time,
                             status: "confirmed",
                             musteriNotu: "",
-                            forceClient: true
+                            forceOwner: true,
+                            idempotencyKey: adminActiveIdempotencyKey
                         });
+
+                        const appt = result?.appointment || {};
+                        applyLocalAdminAppointment(date, time, {
+                            id: appt.id || result?.appointmentId,
+                            customerName,
+                            phone: phone || "—",
+                            service: service || "—",
+                            status: "confirmed"
+                        });
+
+                        adminActiveIdempotencyKey = null;
                         closeModal();
                         showToast(`${customerName} için randevu kaydedildi.`);
-                        await refreshDay(date);
+                        invalidateDay(date);
+                        void refreshDay(date);
                     } catch (err) {
-                        showToast(firestoreErrorMessage(err), "error");
+                        showToast(adminOwnerErrorMessage(err), "error");
+                    } finally {
+                        adminSaveInProgress = false;
+                        if (saveBtn) {
+                            saveBtn.disabled = false;
+                            saveBtn.textContent = "Randevu Kaydet";
+                        }
                     }
                 });
                 return;
             }
 
-            if (state === "closed") {
+            if (presentation.kind === "closed") {
                 if (weekData.dayClosed[date]) {
                     showToast("Günü açmak için üstteki butonu kullanın.", "error");
                     return;
@@ -1443,7 +1808,9 @@ function initAdminPage() {
                 return;
             }
 
-            const appt = weekData.appointments[date][time];
+            const appt = presentation.appt || findAppointmentForSlot(date, time);
+            if (!appt) return;
+
             const outsideWarn = isOutsideCurrentWorkingHours(time)
                 ? `<p style="margin:0 0 12px;padding:10px 12px;border-radius:8px;background:rgba(249,115,22,0.12);border:1px solid rgba(249,115,22,0.35);color:#fb923c;font-size:0.85rem;">⚠️ Bu randevu mevcut çalışma saatleri dışında kalıyor.</p>`
                 : "";
@@ -1516,6 +1883,11 @@ function initAdminPage() {
 
     // Yalnızca bellekteki weekData'dan DOM çizer (Firestore okuması YAPMAZ).
     function drawCalendar() {
+        if (ensureAdminTodayFresh()) {
+            void renderCalendar();
+            return;
+        }
+
         const weekDates = getWeekDates(currentMonday);
         const today = getToday();
 
@@ -1548,31 +1920,37 @@ function initAdminPage() {
 
             weekDates.forEach(date => {
                 const cell = document.createElement("div");
-                const state = getCellState(date, time) || "available";
-                cell.className = `calendar-cell calendar-cell--${state}`;
+                const presentation = resolveCalendarCellPresentation(date, time);
+                cell.className = `calendar-cell ${calendarCellClassName(presentation.kind)}`;
 
                 if (outsideHours) {
                     cell.classList.add("calendar-cell--outside-hours");
                 }
 
-                if (state === "booked") {
-                    const appt = weekData.appointments[date][time];
+                if (presentation.kind === "booked") {
+                    const appt = presentation.appt;
                     cell.textContent = appt.customerName ? appt.customerName.split(" ")[0] : "Dolu";
                     let tip = `${appt.customerName || "Müşteri"} — ${appt.service || "Hizmet"}`;
                     if (outsideHours) {
                         tip += " — Bu randevu mevcut çalışma saatleri dışında kalıyor.";
                     }
                     cell.title = tip;
-                } else if (state === "closed") {
+                    cell.addEventListener("click", () => handleCellClick(date, time));
+                } else if (presentation.kind === "closed") {
                     cell.textContent = "Kapalı";
                     if (outsideHours) {
                         cell.title = "Bu saat mevcut çalışma saatleri dışında.";
                     }
+                    cell.addEventListener("click", () => handleCellClick(date, time));
+                } else if (presentation.kind === "past-empty") {
+                    cell.textContent = "";
+                    cell.setAttribute("aria-disabled", "true");
+                    cell.title = "Geçmiş saat — yeni randevu oluşturulamaz";
                 } else {
                     cell.textContent = "Boş";
+                    cell.addEventListener("click", () => handleCellClick(date, time));
                 }
 
-                cell.addEventListener("click", () => handleCellClick(date, time));
                 calendarGrid.appendChild(cell);
             });
         });
@@ -1591,8 +1969,8 @@ function initAdminPage() {
             drawCalendar();
         } catch (err) {
             console.error("Takvim yüklenemedi:", err);
-            showError(calendarGrid, "Takvim yüklenemedi. Lütfen sayfayı yenileyin.");
-            showToast("Takvim yüklenemedi.", "error");
+            showError(calendarGrid, adminAccessErrorMessage(err));
+            showToast(adminAccessErrorMessage(err), "error");
         }
     }
 
@@ -1619,16 +1997,37 @@ function initAdminPage() {
         renderCalendarFn = renderCalendar;
         drawCalendarFn = drawCalendar;
         renderCalendar();
+        setInterval(() => {
+            if (ensureAdminTodayFresh()) {
+                void renderCalendar();
+            }
+        }, 60_000);
     }
 }
 
 function startAdminApp(slug) {
     if (!slug) return;
-    aktifDukkan = slug;
-    dukkanArayuzunuDinamikYap().then((canContinue) => {
-        if (!canContinue) return;
-        initAdminPage();
-    });
+
+    const calendarGrid = document.getElementById("calendarGrid");
+    if (calendarGrid) {
+        calendarGrid.innerHTML = '<div class="slots-loading">Yetki doğrulanıyor...</div>';
+    }
+
+    getAuthorizedBusinessContextWithFreshToken({ expectedBusinessId: slug })
+        .then(async (context) => {
+            authorizedAdminBusinessId = context.businessId;
+            aktifDukkan = context.businessId;
+            const canContinue = await dukkanArayuzunuDinamikYap();
+            if (!canContinue) return;
+            initAdminPage();
+        })
+        .catch((err) => {
+            authorizedAdminBusinessId = null;
+            clearAuthorizedBusinessContext();
+            const msg = adminAccessErrorMessage(err);
+            if (calendarGrid) showError(calendarGrid, msg);
+            showToast(msg, "error");
+        });
 }
 
 function initAdminWhenAuthed() {
@@ -1672,7 +2071,7 @@ function init() {
     dukkanArayuzunuDinamikYap().then((canContinue) => {
         if (!canContinue) return;
         if (document.getElementById("slotsContainer")) {
-            initCustomerPage();
+            void initCustomerPage();
         }
     });
 }

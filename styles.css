@@ -460,6 +460,14 @@ select option {
     opacity: 0.6;
 }
 
+.slot--checking {
+    background: rgba(148, 163, 184, 0.12);
+    border-color: rgba(148, 163, 184, 0.25);
+    color: var(--text-secondary);
+    cursor: wait;
+    opacity: 0.85;
+}
+
 .slot--selected {
     background: var(--accent) !important;
     border-color: var(--accent) !important;
@@ -730,6 +738,17 @@ select option {
 
 .calendar-cell--closed:hover {
     background: rgba(82, 82, 91, 0.3);
+}
+
+.calendar-cell--past-empty {
+    background: rgba(148, 163, 184, 0.06);
+    color: var(--text-secondary);
+    cursor: not-allowed;
+    opacity: 0.45;
+}
+
+.calendar-cell--past-empty:hover {
+    background: rgba(148, 163, 184, 0.06);
 }
 
 .day-actions {

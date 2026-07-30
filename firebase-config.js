@@ -1,5 +1,19 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getFirestore } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { getFirestore, connectFirestoreEmulator } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import {
+    AUTH_EMULATOR_HOST,
+    AUTH_EMULATOR_PORT,
+    FIRESTORE_EMULATOR_HOST,
+    FIRESTORE_EMULATOR_PORT,
+    shouldConnectAuthEmulator,
+    shouldConnectFirestoreEmulator
+} from "./legacyAuthCompat.js";
+
+export {
+    shouldConnectAuthEmulator,
+    shouldConnectFirestoreEmulator,
+    isLocalDevHost
+} from "./legacyAuthCompat.js";
 
 /** URL parametrelerini okur (müşteri randevu sayfası). */
 function getBookingUrlParams() {
@@ -7,7 +21,7 @@ function getBookingUrlParams() {
     return new URLSearchParams(window.location.search);
 }
 
-/** Eski client-side yol zorunlu mu? (?cfBooking=0 veya ?forceClientBooking=1) */
+/** Emulator-only rollback: ?forceClientBooking=1 veya ?cfBooking=0 */
 export function isForceClientBookingQuery() {
     const params = getBookingUrlParams();
     if (params.get("forceClientBooking") === "1" || params.get("forceClientBooking") === "true") {
@@ -19,52 +33,32 @@ export function isForceClientBookingQuery() {
     return false;
 }
 
-/**
- * Müşteri randevu yolu: varsayılan Cloud Function (Faz 5C-C4).
- * Admin paneli createAppointmentWithEffects({ forceClient: true }) ile client yolunu kullanır.
- */
-export function shouldUseCallableBooking({ forceClient = false } = {}) {
-    if (forceClient) return false;
-    if (typeof window === "undefined") return true;
-    if (isForceClientBookingQuery()) return false;
-    return true;
-}
-
-/** Geriye dönük uyumluluk — C4 sonrası varsayılan CF. */
-export function isCfBookingQueryEnabled() {
-    return shouldUseCallableBooking({ forceClient: false });
-}
-
-let createAppointmentCallablePromise = null;
+let resolveAuthIdentifierCallablePromise = null;
 
 /**
- * Callable createAppointment — lazy import.
+ * Emulator-only username resolver callable — lazy import.
+ * Yalnız localhost + authEmulator flag ile kullanılabilir.
  * @returns {Promise<import('firebase/functions').HttpsCallable|null>}
  */
-export async function getCreateAppointmentCallable({ forceClient = false } = {}) {
-    if (!shouldUseCallableBooking({ forceClient })) return null;
+export async function getResolveAuthIdentifierCallable() {
+    if (!shouldConnectAuthEmulator()) return null;
 
-    if (!createAppointmentCallablePromise) {
-        createAppointmentCallablePromise = (async () => {
+    if (!resolveAuthIdentifierCallablePromise) {
+        resolveAuthIdentifierCallablePromise = (async () => {
             const { getFunctions, httpsCallable, connectFunctionsEmulator } = await import(
                 "https://www.gstatic.com/firebasejs/10.7.1/firebase-functions.js"
             );
             const functions = getFunctions(app);
-            if (
-                typeof location !== "undefined" &&
-                (location.hostname === "localhost" || location.hostname === "127.0.0.1")
-            ) {
-                try {
-                    connectFunctionsEmulator(functions, "127.0.0.1", 5001);
-                } catch {
-                    /* emulator zaten bağlı */
-                }
+            try {
+                connectFunctionsEmulator(functions, "127.0.0.1", 5001);
+            } catch {
+                /* emulator zaten bağlı */
             }
-            return httpsCallable(functions, "createAppointment");
+            return httpsCallable(functions, "resolveAuthIdentifierForEmulator");
         })();
     }
 
-    return createAppointmentCallablePromise;
+    return resolveAuthIdentifierCallablePromise;
 }
 
 export const FIREBASE_CONFIG_STORAGE_KEY = "berberFirebaseConfig";
@@ -122,6 +116,55 @@ export function hasFirebaseConfig() {
 
 export const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
+
+if (typeof window !== "undefined" && shouldConnectFirestoreEmulator()) {
+    try {
+        connectFirestoreEmulator(db, FIRESTORE_EMULATOR_HOST, FIRESTORE_EMULATOR_PORT);
+    } catch {
+        /* emulator zaten bağlı */
+    }
+}
+
+// =============================================================================
+// Firebase Auth — Phase 1 foundation (paralel; legacy login bozulmaz)
+// =============================================================================
+
+/** @deprecated shouldConnectAuthEmulator kullanın */
+export function isAuthEmulatorEnabled() {
+    return shouldConnectAuthEmulator();
+}
+
+let authInitPromise = null;
+
+/**
+ * Lazy Firebase Auth instance (CDN import). Idempotent — tek instance,
+ * connectAuthEmulator tek kez.
+ * @returns {Promise<import('firebase/auth').Auth>}
+ */
+export async function getAuthInstance() {
+    if (authInitPromise) return authInitPromise;
+
+    authInitPromise = (async () => {
+        const { getAuth, connectAuthEmulator } = await import(
+            "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js"
+        );
+        const auth = getAuth(app);
+
+        if (shouldConnectAuthEmulator()) {
+            try {
+                connectAuthEmulator(auth, `http://${AUTH_EMULATOR_HOST}:${AUTH_EMULATOR_PORT}`, {
+                    disableWarnings: true
+                });
+            } catch {
+                /* emulator zaten bağlı */
+            }
+        }
+
+        return auth;
+    })();
+
+    return authInitPromise;
+}
 
 // =============================================================================
 // App Check — MONITOR MODE (Faz 5C-C3)

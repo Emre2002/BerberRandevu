@@ -1,0 +1,26 @@
+{
+  "description": "Yalnız Firebase Auth Emulator geliştirme hesapları. Production verisi değildir.",
+  "syntheticEmailDomain": "users.berberrandevu.internal",
+  "users": [
+    {
+      "username": "emulator_owner",
+      "businessId": "shop-emulator-a",
+      "devPasswordHint": "Emulator-only test password — Auth Emulator UI veya import ile oluşturun",
+      "privateBarber": {
+        "name": "Emulator Shop A",
+        "address": "Emulator Cad. No: 1",
+        "city": "Istanbul",
+        "district": "Kadikoy",
+        "neighborhood": "Moda",
+        "openHour": "09:00",
+        "closeHour": "18:00",
+        "status": "active",
+        "selectedServices": ["Sac Kesimi", "Sakal"],
+        "password": "synthetic-emulator-private-password",
+        "username": "emulator_owner",
+        "telegramChatId": "emulator-telegram-sentinel-999",
+        "subscriptionStatus": "active"
+      }
+    }
+  ]
+}

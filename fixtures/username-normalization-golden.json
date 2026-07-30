@@ -1,0 +1,21 @@
+{
+  "description": "Paylaşılan username normalization golden vectors — sentetik test verisi.",
+  "vectors": [
+    { "id": "ascii_plain", "input": "ahmet_01", "normalized": "ahmet_01", "ok": true },
+    { "id": "trim_spaces", "input": "  testuser  ", "normalized": "testuser", "ok": true },
+    { "id": "upper_ascii", "input": "TestUser", "normalized": "testuser", "ok": true },
+    { "id": "dot", "input": "user.name", "normalized": "user.name", "ok": true },
+    { "id": "underscore", "input": "user_name", "normalized": "user_name", "ok": true },
+    { "id": "hyphen", "input": "user-name", "normalized": "user-name", "ok": true },
+    { "id": "turkish_I_word", "input": "IŞIK", "normalized": "ışık", "ok": false, "reason": "invalid_chars" },
+    { "id": "turkish_I_single", "input": "I", "normalized": "ı", "ok": false, "reason": "too_short" },
+    { "id": "turkish_İ", "input": "İstanbul", "normalized": "istanbul", "ok": true },
+    { "id": "turkish_ı", "input": "ığdır", "normalized": "ığdır", "ok": false, "reason": "invalid_chars" },
+    { "id": "fullwidth", "input": "ＡＢＣ123", "normalized": "abc123", "ok": true },
+    { "id": "invisible_char", "input": "ab\u200bcd", "normalized": "ab\u200bcd", "ok": false, "reason": "invalid_chars" },
+    { "id": "too_short", "input": "ab", "normalized": "ab", "ok": false, "reason": "too_short" },
+    { "id": "too_long", "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "normalized": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "ok": false, "reason": "too_long" },
+    { "id": "empty_string", "input": "", "normalized": "", "ok": false, "reason": "empty" },
+    { "id": "null_value", "input": null, "normalized": "", "ok": false, "reason": "empty" }
+  ]
+}

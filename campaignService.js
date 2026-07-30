@@ -1,4 +1,4 @@
-import { collection, addDoc, getDocs, query, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { collection, addDoc, getDocs, query, orderBy, where, limit, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { db } from "./firebase-config.js";
 import { fetchAllCustomers, fetchCustomersByBarber } from "./customerService.js";
 
@@ -105,9 +105,16 @@ export async function fetchCampaignHistory(limit = 30) {
     return list.slice(0, limit);
 }
 
-export async function fetchCampaignsByBarber(barberSlug, limit = 20) {
-    const all = await fetchCampaignHistory(100);
-    return all
-        .filter((c) => c.sentBy === barberSlug || c.barberSlug === barberSlug)
-        .slice(0, limit);
+export async function fetchCampaignsByBarber(barberSlug, max = 20) {
+    if (!barberSlug) return [];
+    const q = query(
+        collection(db, CAMPAIGNS),
+        where("barberSlug", "==", barberSlug),
+        orderBy("createdAt", "desc"),
+        limit(max)
+    );
+    const snap = await getDocs(q);
+    const list = [];
+    snap.forEach((d) => list.push({ id: d.id, ...d.data() }));
+    return list;
 }
