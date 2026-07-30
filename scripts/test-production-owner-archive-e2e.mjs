@@ -8,12 +8,10 @@ import { readFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getAdminDb } from "../api/_lib/firebase-admin.js";
-import { resolvePublicBusinessSlug } from "../api/_lib/resolve-public-business-slug.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, "..");
 const BASE = (process.env.SMOKE_BASE_URL || "https://berberv1.vercel.app").replace(/\/$/, "");
-const slug = process.env.SMOKE_PUBLIC_SLUG || process.env.SMOKE_OWNER_SLUG || "x-men";
 const ownerUsername = process.env.SMOKE_OWNER_USERNAME || "bedirhan";
 const ARTIFACT_DIR = resolve(ROOT, ".local-private/validation-artifacts/archive-appointment");
 
@@ -36,9 +34,9 @@ function loadOwnerPassword(username) {
     return null;
 }
 
-function tomorrowYmd() {
+function addDaysYmd(offset) {
     const d = new Date();
-    d.setDate(d.getDate() + 1);
+    d.setDate(d.getDate() + offset);
     return d.toISOString().slice(0, 10);
 }
 
@@ -72,11 +70,24 @@ async function signInOwner(authEmail, password) {
     return body.idToken;
 }
 
-async function fetchAvailability(date) {
-    const url = `${BASE}/api/public/availability?dukkan=${encodeURIComponent(slug)}&date=${date}`;
+async function fetchAvailability(date, dukkan) {
+    const url = `${BASE}/api/public/availability?dukkan=${encodeURIComponent(dukkan)}&date=${date}`;
     const resp = await fetch(url);
     const body = await resp.json().catch(() => null);
     return { status: resp.status, body };
+}
+
+async function findOpenSlot(dukkan) {
+    for (let offset = 1; offset <= 14; offset += 1) {
+        const d = new Date();
+        d.setDate(d.getDate() + offset);
+        const date = d.toISOString().slice(0, 10);
+        const avail = await fetchAvailability(date, dukkan);
+        if (avail.status === 200 && avail.body?.availableSlots?.length) {
+            return { date, time: avail.body.availableSlots[0] };
+        }
+    }
+    throw new Error("availability_not_found");
 }
 
 const report = {
@@ -110,19 +121,11 @@ try {
 
     idToken = await signInOwner(resolved.authEmail, password);
 
-    date = tomorrowYmd();
-    const avail = await fetchAvailability(date);
-    if (avail.status !== 200 || !avail.body?.availableSlots?.length) {
-        throw new Error(`availability_${avail.status}`);
-    }
-    time = avail.body.availableSlots[0];
+    const slot = await findOpenSlot(businessId);
+    date = slot.date;
+    time = slot.time;
 
     const db = getAdminDb();
-    const canonicalBusinessId = await resolvePublicBusinessSlug(db, slug);
-    if (canonicalBusinessId !== businessId) {
-        throw new Error("owner_business_mismatch");
-    }
-
     const publicSnap = await db.collection("publicBarbers").doc(businessId).get();
     const services = publicSnap.data()?.selectedServices;
     const service = Array.isArray(services) && services.length ? services[0] : "Saç Kesimi";
