@@ -1,10 +1,19 @@
 import { bootstrapPassiveAuthFoundation } from "./authService.js";
+import { authSignOut } from "./authService.js";
+import { getAuthInstance } from "./firebase-config.js";
 import {
     isSuperAdminLoggedIn,
     loginSuperAdmin,
     logoutSuperAdmin
 } from "./sessionAuth.js";
 import { validateSuperAdminLogin } from "./superAdminAuth.js";
+import {
+    signInWithProductionSuperAdminAuth,
+    PRODUCTION_SUPER_ADMIN_LOGIN_ERROR,
+    PRODUCTION_SUPER_ADMIN_FORBIDDEN_ERROR,
+    PRODUCTION_SUPER_ADMIN_UNAVAILABLE_ERROR
+} from "./productionSuperAdminLogin.js";
+import { shouldUseEmulatorAuthLogin } from "./legacyAuthCompat.js";
 import { mountSuperAdminPanel, unmountSuperAdminPanel } from "./super-admin-panel.js";
 import { migrateVisitDates } from "./migrateVisitDates.js";
 import { syncAllPublicBarbersForMigration } from "./firestoreService.js";
@@ -44,19 +53,38 @@ function clearSuperAdminGlobals() {
     delete window.syncAllPublicBarbersForMigration;
 }
 
+async function ensureSuperAdminAuthSession() {
+    const auth = await getAuthInstance();
+    const user = auth.currentUser;
+    if (!user) {
+        throw Object.assign(new Error("super_admin_auth_required"), { code: "auth_required" });
+    }
+
+    const tokenResult = await user.getIdTokenResult(true);
+    if (tokenResult.claims?.superAdmin !== true) {
+        await authSignOut();
+        throw Object.assign(new Error("super_admin_forbidden"), { code: "forbidden" });
+    }
+}
+
 async function showPanel() {
     loginError?.classList.remove("show");
     registerSuperAdminGlobals();
     try {
+        await ensureSuperAdminAuthSession();
         await mountSuperAdminPanel(mountEl, {
             showToast,
             onLogout: showLogin
         });
         loginScreen.hidden = true;
     } catch (err) {
-        console.error("[SuperAdmin] Panel yüklenemedi:", err);
+        console.error("[SuperAdmin] panel_load_failed", err?.code || "unknown");
         loginScreen.hidden = false;
-        showToast("Panel yüklenemedi. Sayfayı yenileyin.", "error");
+        if (err?.code === "forbidden") {
+            showToast("Bu hesap süper admin yetkisine sahip değil.", "error");
+        } else {
+            showToast("Panel verileri yüklenemedi. Oturumunuzu yenileyip tekrar deneyin.", "error");
+        }
     }
 }
 
@@ -71,18 +99,46 @@ loginForm?.addEventListener("submit", async (e) => {
         const password = document.getElementById("saPassword").value;
         const valid = await validateSuperAdminLogin(username, password);
 
-        if (valid) {
+        if (!valid) {
+            loginError?.classList.add("show");
+            return;
+        }
+
+        if (shouldUseEmulatorAuthLogin()) {
             loginSuperAdmin();
             await showPanel();
-        } else {
-            loginError?.classList.add("show");
+            return;
         }
+
+        await signInWithProductionSuperAdminAuth(username, password);
+        loginSuperAdmin();
+        await showPanel();
+    } catch (err) {
+        if (err?.message === "production_super_admin_missing_claim") {
+            loginError.textContent = PRODUCTION_SUPER_ADMIN_FORBIDDEN_ERROR;
+        } else if (
+            err?.message === "production_super_admin_invalid_response" ||
+            err?.code === "auth/wrong-password" ||
+            err?.code === "auth/invalid-credential" ||
+            err?.code === "auth_failed"
+        ) {
+            loginError.textContent = PRODUCTION_SUPER_ADMIN_LOGIN_ERROR;
+        } else {
+            loginError.textContent = PRODUCTION_SUPER_ADMIN_UNAVAILABLE_ERROR;
+        }
+        loginError?.classList.add("show");
     } finally {
         loginBtn.disabled = false;
         loginBtn.textContent = "Giriş Yap";
     }
 });
 
-if (isSuperAdminLoggedIn()) {
-    showPanel();
-}
+(async () => {
+    if (!isSuperAdminLoggedIn()) return;
+    try {
+        await ensureSuperAdminAuthSession();
+        await showPanel();
+    } catch {
+        showLogin();
+    }
+})();

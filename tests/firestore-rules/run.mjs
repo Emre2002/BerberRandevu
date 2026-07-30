@@ -81,9 +81,32 @@ function waitForPort(port, timeoutMs = 120000) {
     });
 }
 
+function isPortListening(port) {
+    return new Promise((resolvePromise) => {
+        const socket = net.connect({ host: "127.0.0.1", port }, () => {
+            socket.end();
+            resolvePromise(true);
+        });
+        socket.on("error", () => resolvePromise(false));
+    });
+}
+
+async function assertPortAvailable(port) {
+    const busy = await isPortListening(port);
+    if (busy) {
+        throw new Error(
+            `[rules-test] port ${port} is already in use. Stop the conflicting emulator/process and retry.`
+        );
+    }
+}
+
 async function runWithEmulator(testFile, configFile) {
     const ports = loadPorts(configFile);
+    await assertPortAvailable(ports.firestore);
+    await assertPortAvailable(ports.auth);
+
     const env = buildSanitizedEnv(ports);
+    let startedByRunner = false;
     const emu = spawn(
         "firebase",
         [
@@ -97,9 +120,10 @@ async function runWithEmulator(testFile, configFile) {
         ],
         { cwd: REPO_ROOT, env, stdio: ["ignore", "pipe", "pipe"], shell: true }
     );
+    startedByRunner = true;
 
     const killEmu = () => {
-        if (!emu.killed) {
+        if (startedByRunner && emu.pid && !emu.killed) {
             emu.kill("SIGINT");
         }
     };

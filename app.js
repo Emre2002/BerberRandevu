@@ -32,6 +32,11 @@ import {
     isWithinWorkingHours,
     sortSlotTimes
 } from "./workingHoursService.js";
+import {
+    fetchPublicAvailability,
+    checkPublicPhoneDuplicate,
+    mapPublicAvailabilityToDayData
+} from "./publicAvailabilityClient.js";
 import { 
     doc,
     getDoc,
@@ -69,6 +74,10 @@ function getTenantBusinessId() {
         return authorizedAdminBusinessId;
     }
     return aktifDukkan;
+}
+
+function isCustomerBookingPage() {
+    return Boolean(isCustomerPageEarly) && !isAdminPageEarly;
 }
 
 function escapeHtml(str) {
@@ -585,7 +594,27 @@ function invalidateAllDayCache() {
     dayDataCache.clear();
 }
 
+async function fetchPublicDayData(date, { force = false } = {}) {
+    const cacheKey = dayCacheKey(date);
+
+    if (!force) {
+        const cached = dayDataCache.get(cacheKey);
+        if (cached && Date.now() - cached.ts < DAY_CACHE_TTL_MS) {
+            return cached.data;
+        }
+    }
+
+    const apiPayload = await fetchPublicAvailability(getTenantBusinessId(), date);
+    const data = mapPublicAvailabilityToDayData(apiPayload);
+    dayDataCache.set(cacheKey, { ts: Date.now(), data });
+    return data;
+}
+
 async function getDayData(date, { force = false } = {}) {
+    if (isCustomerBookingPage()) {
+        return fetchPublicDayData(date, { force });
+    }
+
     if (!db) {
         throw new Error("Firebase bağlantısı kurulamadı.");
     }
@@ -726,7 +755,7 @@ function setRandomMotivationQuote() {
     el.textContent = `"${quote}"`;
 }
 
-function initCustomerPage() {
+async function initCustomerPage() {
     const slotsContainer = document.getElementById("slotsContainer");
     if (!slotsContainer) return;
 
@@ -941,6 +970,20 @@ function initCustomerPage() {
             return false;
         }
 
+        if (isCustomerBookingPage()) {
+            try {
+                phoneDuplicateBlocked = await checkPublicPhoneDuplicate({
+                    businessSlug: getTenantBusinessId(),
+                    date,
+                    phone
+                });
+            } catch {
+                phoneDuplicateBlocked = false;
+            }
+            if (phoneDuplicateBlocked) showDuplicateAppointmentModal();
+            return phoneDuplicateBlocked;
+        }
+
         const { appointments } = await getDayData(date, { force });
         const existing = findActiveAppointmentByPhoneOnDay({ appointments, phone });
         phoneDuplicateBlocked = Boolean(existing);
@@ -1036,9 +1079,15 @@ function initCustomerPage() {
 
             renderSlots(slotsContainer, date, appointments, blocked, false, onSlotSelect);
         } catch (err) {
-            console.error("Saatler yüklenemedi:", err);
-            showError(slotsContainer, customerErrorMessage(err));
-            showToast("Saatler yüklenemedi.", "error");
+            if (err?.code === "availability_request_aborted") {
+                return;
+            }
+            console.error("availability_load_failed", err?.code || "unknown");
+            const userMessage = isCustomerBookingPage()
+                ? "Saat bilgileri şu anda yüklenemiyor. Lütfen tekrar deneyin."
+                : customerErrorMessage(err);
+            showError(slotsContainer, userMessage);
+            showToast(userMessage, "error");
         }
     }
     
@@ -1178,8 +1227,8 @@ function initCustomerPage() {
         });
     }
 
-    loadAvailableSlots();
-    loadTodayCount();
+    await loadAvailableSlots();
+    await loadTodayCount();
 }
 
 function initAdminPage() {
@@ -1745,7 +1794,7 @@ function init() {
     dukkanArayuzunuDinamikYap().then((canContinue) => {
         if (!canContinue) return;
         if (document.getElementById("slotsContainer")) {
-            initCustomerPage();
+            void initCustomerPage();
         }
     });
 }

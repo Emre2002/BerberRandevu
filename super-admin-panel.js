@@ -1,8 +1,13 @@
 import {
-    fetchAllBarbers, fetchBarber, createBarber, updateBarber,
+    fetchBarber, createBarber, updateBarber,
     toggleBarberStatus, extendSubscription, removeBarber, normalizeSlug, formatDate,
     syncAllPublicBarbersForMigration
 } from "./firestoreService.js";
+import {
+    listBusinessesForSuperAdminViaApi,
+    updateBusinessForSuperAdminViaApi,
+    shouldUsePrivilegedApi
+} from "./privilegedApiClient.js";
 import {
     getBookingUrl, getWhatsAppBookingMessage
 } from "./linkService.js";
@@ -42,6 +47,49 @@ let barbersCache = [];
 let pendingBarbersCount = 0;
 let panelMounted = false;
 let showToastFn = () => {};
+
+async function superAdminExtendSubscription(slug, months) {
+    if (shouldUsePrivilegedApi()) {
+        const response = await updateBusinessForSuperAdminViaApi({
+            slug,
+            action: "extend_subscription",
+            months
+        });
+        return response.subscriptionEndDate;
+    }
+    return extendSubscription(slug, months);
+}
+
+async function superAdminUpdateBarber(slug, updates) {
+    if (shouldUsePrivilegedApi()) {
+        const response = await updateBusinessForSuperAdminViaApi({
+            slug,
+            updates
+        });
+        return response.business;
+    }
+    await updateBarber(slug, updates, slug);
+    return fetchBarber(slug);
+}
+
+async function superAdminToggleBarberStatus(slug, currentStatus) {
+    if (shouldUsePrivilegedApi()) {
+        const response = await updateBusinessForSuperAdminViaApi({
+            slug,
+            action: "toggle_status"
+        });
+        return response.status;
+    }
+    return toggleBarberStatus(slug, currentStatus);
+}
+
+async function superAdminRemoveBarber(slug) {
+    if (shouldUsePrivilegedApi()) {
+        await updateBusinessForSuperAdminViaApi({ slug, action: "delete" });
+        return;
+    }
+    await removeBarber(slug);
+}
 
 // --- Dashboard durumu (tüm filtre/sıralama/arama frontend'de; ekstra read YOK) ---
 let statsBySlug = {};            // slug -> { customers, appointments, revenue }
@@ -860,14 +908,25 @@ function updatePendingBarbersBadge(count) {
 async function loadPanelData() {
     if (!hasFirebaseConfig()) return;
 
-    barbersCache = await fetchAllBarbers();
-    try {
-        const customers = await fetchAllCustomers();
-        statsBySlug = aggregateCustomerStats(customers);
-    } catch (err) {
-        console.warn("Müşteri istatistikleri yüklenemedi:", err);
-        statsBySlug = {};
+    if (shouldUsePrivilegedApi()) {
+        try {
+            const response = await listBusinessesForSuperAdminViaApi();
+            barbersCache = Array.isArray(response?.businesses) ? response.businesses : [];
+        } catch (err) {
+            console.error("[SuperAdmin] list_businesses_failed", err?.code || err?.status || "unknown");
+            if (err?.status === 403) {
+                throw Object.assign(new Error("super_admin_forbidden"), { code: "forbidden" });
+            }
+            throw Object.assign(new Error("super_admin_panel_load_failed"), {
+                code: err?.code || "panel_load_failed"
+            });
+        }
+    } else {
+        const { fetchAllBarbers } = await import("./firestoreService.js");
+        barbersCache = await fetchAllBarbers();
     }
+
+    statsBySlug = {};
     refreshBarberStatsUI();
     try {
         const pending = await loadPendingBarbersPanel();
@@ -1051,7 +1110,7 @@ async function handleBulkAction(action) {
             const months = Number(prompt("Seçili dükkanların aboneliği kaç ay uzatılsın?", "1"));
             if (!months || months < 1) return;
             for (const slug of slugs) {
-                const end = await extendSubscription(slug, months);
+                const end = await superAdminExtendSubscription(slug, months);
                 const c = barbersCache.find((b) => b.slug === slug);
                 if (c) { c.subscriptionEndDate = end; c.subscriptionStatus = "active"; }
             }
@@ -1059,7 +1118,7 @@ async function handleBulkAction(action) {
         } else if (action === "activate" || action === "passive") {
             const status = action === "activate" ? "active" : "passive";
             for (const slug of slugs) {
-                await updateBarber(slug, { status }, slug);
+                await superAdminUpdateBarber(slug, { status });
                 const c = barbersCache.find((b) => b.slug === slug);
                 if (c) c.status = status;
             }
@@ -1256,7 +1315,7 @@ function bindPanelEvents(onLogout) {
         const { action, slug } = btn.dataset;
 
         if (action === "toggle") {
-            const newStatus = await toggleBarberStatus(slug, btn.dataset.status);
+            const newStatus = await superAdminToggleBarberStatus(slug, btn.dataset.status);
             const cached = barbersCache.find(b => b.slug === slug);
             if (cached) cached.status = newStatus;
             showToastFn("Durum güncellendi.");
@@ -1268,7 +1327,7 @@ function bindPanelEvents(onLogout) {
             await copyBookingLink(slug);
         } else if (action === "delete") {
             if (confirm("Bu berberi silmek istediğinize emin misiniz?")) {
-                await removeBarber(slug);
+                await superAdminRemoveBarber(slug);
                 const idx = barbersCache.findIndex(b => b.slug === slug);
                 if (idx !== -1) barbersCache.splice(idx, 1);
                 dashView.selected.delete(slug);
@@ -1320,7 +1379,7 @@ function bindPanelEvents(onLogout) {
                 subscriptionStatus,
                 lastSubscriptionUpdate: serverTimestamp()
             };
-            await updateBarber(slug, updates, slug);
+            await superAdminUpdateBarber(slug, updates);
             const cached = barbersCache.find(b => b.slug === slug);
             if (cached) {
                 const { lastSubscriptionUpdate, ...cacheFields } = updates;
@@ -1340,7 +1399,7 @@ function bindPanelEvents(onLogout) {
         btn.addEventListener("click", async () => {
             const slug = document.getElementById("editSlug").value;
             const months = Number(btn.dataset.extend);
-            const newEnd = await extendSubscription(slug, months);
+            const newEnd = await superAdminExtendSubscription(slug, months);
             const cached = barbersCache.find(b => b.slug === slug);
             if (cached) {
                 cached.subscriptionEndDate = newEnd;

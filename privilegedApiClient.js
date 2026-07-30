@@ -39,20 +39,20 @@ export function getPrivilegedApiBaseUrl() {
     return PRODUCTION_BASE_URL;
 }
 
-async function getAuthHeader() {
+async function getAuthHeader(forceRefresh = false) {
     const auth = await getAuthInstance();
     const user = auth.currentUser;
     if (!user) return {};
-    const token = await user.getIdToken();
+    const token = await user.getIdToken(forceRefresh);
     return { Authorization: `Bearer ${token}` };
 }
 
 /**
  * @param {string} routeKey
  * @param {object} [payload]
- * @param {{ auth?: boolean }} [opts]
+ * @param {{ auth?: boolean, retryOn401?: boolean }} [opts]
  */
-export async function callPrivilegedApi(routeKey, payload = {}, opts = { auth: true }) {
+export async function callPrivilegedApi(routeKey, payload = {}, opts = { auth: true, retryOn401: true }) {
     const path = API_ROUTE_MAP[routeKey];
     if (!path) {
         throw new Error("privileged_api_route_unknown");
@@ -60,15 +60,23 @@ export async function callPrivilegedApi(routeKey, payload = {}, opts = { auth: t
 
     const url = `${getPrivilegedApiBaseUrl()}${path}`;
     const headers = { "Content-Type": "application/json" };
-    if (opts.auth !== false) {
-        Object.assign(headers, await getAuthHeader());
-    }
 
-    const response = await fetch(url, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(payload)
-    });
+    const doRequest = async (forceRefresh) => {
+        if (opts.auth !== false) {
+            Object.assign(headers, await getAuthHeader(forceRefresh));
+        }
+        return fetch(url, {
+            method: "POST",
+            headers,
+            body: JSON.stringify(payload)
+        });
+    };
+
+    let response = await doRequest(false);
+
+    if (response.status === 401 && opts.auth !== false && opts.retryOn401 !== false) {
+        response = await doRequest(true);
+    }
 
     let data = null;
     try {
@@ -89,6 +97,14 @@ export async function callPrivilegedApi(routeKey, payload = {}, opts = { auth: t
 
 export async function resolveProductionAuthIdentifier(username) {
     return callPrivilegedApi("resolveAuthIdentifier", { username }, { auth: false });
+}
+
+export async function listBusinessesForSuperAdminViaApi() {
+    return callPrivilegedApi("listBusinessesForSuperAdmin", {});
+}
+
+export async function updateBusinessForSuperAdminViaApi(payload) {
+    return callPrivilegedApi("updateBusinessForSuperAdmin", payload);
 }
 
 export async function setOwnerPasswordViaApi(businessId, password) {
