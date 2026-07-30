@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * Verify Firebase Auth sign-in only — no secrets in output.
+ * Direct production auth diagnostic — resolver + Firebase signInWithPassword REST.
+ * Reads credentials only from ignored .local-private files. Never logs passwords or tokens.
  */
-import { chromium } from "playwright";
 import { readFileSync, existsSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,82 +11,216 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, "..");
 const BASE = (process.env.SMOKE_BASE_URL || "https://berberv1.vercel.app").replace(/\/$/, "");
 
-function loadAccounts() {
-    const accounts = [];
+function readProductionApiKey() {
+    const configPath = resolve(ROOT, "firebase-config.js");
+    const text = readFileSync(configPath, "utf8");
+    const match = text.match(/apiKey:\s*"([^"]+)"/);
+    if (!match?.[1]) throw new Error("production_firebase_api_key_missing");
+    return match[1];
+}
+
+const API_KEY = readProductionApiKey();
+const IDENTITY_URL = `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${API_KEY}`;
+
+const ACCOUNTS = [
+    { username: "superadmin", roleHint: "superAdmin", expectedRole: "superAdmin" },
+    { username: "bedirhan", roleHint: "owner", expectedRole: "owner" },
+    { username: "altinmakas", roleHint: "owner", expectedRole: "owner" },
+    { username: "akkus", roleHint: "owner", expectedRole: "owner" }
+];
+
+function stripBom(text) {
+    return text.charCodeAt(0) === 0xFEFF ? text.slice(1) : text;
+}
+
+function parseCsvLine(line) {
+    const cols = [];
+    let current = "";
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i += 1) {
+        const ch = line[i];
+        if (ch === '"') {
+            inQuotes = !inQuotes;
+            continue;
+        }
+        if (ch === "," && !inQuotes) {
+            cols.push(current);
+            current = "";
+            continue;
+        }
+        current += ch;
+    }
+    cols.push(current);
+    return cols.map((s) => s.trim());
+}
+
+function loadPasswordMap() {
+    const map = new Map();
     const saFile = resolve(ROOT, ".local-private/superadmin-credentials.txt");
     if (existsSync(saFile)) {
-        const text = readFileSync(saFile, "utf8");
+        const text = stripBom(readFileSync(saFile, "utf8"));
         const username = text.match(/^Username=(.+)$/m)?.[1]?.trim();
         const password = text.match(/^Password=(.+)$/m)?.[1]?.trim();
-        if (username && password) accounts.push({ username, password, mode: "superAdmin" });
+        if (username && password) map.set(username, password);
     }
 
     const csvFile = resolve(ROOT, ".local-private/business-login-credentials.csv");
     if (existsSync(csvFile)) {
-        for (const line of readFileSync(csvFile, "utf8").split(/\r?\n/)) {
-            if (!line.trim() || /^businessname/i.test(line)) continue;
-            const cols = line.split(",").map((s) => s.trim());
-            if (cols.length >= 3) accounts.push({ username: cols[1], password: cols[2], mode: "owner" });
+        const lines = stripBom(readFileSync(csvFile, "utf8")).split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+        for (const line of lines) {
+            if (/^businessname/i.test(line)) continue;
+            const cols = parseCsvLine(line);
+            if (cols.length >= 3 && cols[1] && cols[2]) {
+                map.set(cols[1], cols[2]);
+            }
         }
     }
-    return accounts;
+    return map;
 }
 
-async function verifyOwner(page, { username, password }) {
-    await page.goto(`${BASE}/giris.html`, { waitUntil: "domcontentloaded" });
-    await page.fill("#girisUsername", username);
-    await page.fill("#girisPassword", password);
-    await Promise.all([
-        page.waitForURL(/admin\.html/i, { waitUntil: "domcontentloaded", timeout: 45000 }).catch(() => null),
-        page.locator("#girisForm").evaluate((f) => f.requestSubmit())
-    ]);
-    const signedIn = await page.evaluate(async () => {
-        const cfg = await import("/firebase-config.js");
-        return Boolean((await cfg.getAuthInstance()).currentUser);
+async function resolveUsername(username, roleHint) {
+    const resp = await fetch(`${BASE}/api/resolve-auth-identifier`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, roleHint })
     });
-    return signedIn;
+    let body = null;
+    try {
+        body = await resp.json();
+    } catch {
+        body = null;
+    }
+    return {
+        httpStatus: resp.status,
+        authEmail: body?.authEmail || null,
+        role: body?.role || null,
+        businessId: body?.businessId ?? null,
+        error: body?.error || null
+    };
 }
 
-async function verifySuperAdmin(page, { username, password }) {
-    await page.goto(`${BASE}/super-admin.html`, { waitUntil: "domcontentloaded" });
-    await page.fill("#saUsername", username);
-    await page.fill("#saPassword", password);
-    await page.locator("#saLoginForm").evaluate((f) => f.requestSubmit());
-    await page.waitForTimeout(8000);
-    return page.evaluate(async () => {
-        const cfg = await import("/firebase-config.js");
-        const auth = await cfg.getAuthInstance();
-        const user = auth.currentUser;
-        if (!user) return false;
-        const token = await user.getIdTokenResult(true);
-        return token.claims?.superAdmin === true;
+async function firebaseSignIn(authEmail, password) {
+    const resp = await fetch(IDENTITY_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            email: authEmail,
+            password,
+            returnSecureToken: true
+        })
     });
+    let body = null;
+    try {
+        body = await resp.json();
+    } catch {
+        body = null;
+    }
+    if (!resp.ok) {
+        return {
+            ok: false,
+            errorCode: body?.error?.message || `http_${resp.status}`,
+            uid: null,
+            idTokenPresent: false,
+            superAdminClaim: false
+        };
+    }
+    const idToken = body?.idToken || "";
+    let superAdminClaim = false;
+    if (idToken) {
+        try {
+            const payload = JSON.parse(Buffer.from(idToken.split(".")[1], "base64url").toString("utf8"));
+            superAdminClaim = payload?.superAdmin === true;
+        } catch {
+            superAdminClaim = false;
+        }
+    }
+    return {
+        ok: true,
+        errorCode: null,
+        uid: body?.localId || null,
+        idTokenPresent: Boolean(idToken),
+        superAdminClaim
+    };
+}
+
+function validateResolverShape(account, resolved) {
+    if (resolved.httpStatus !== 200) return `resolver_http_${resolved.httpStatus}`;
+    if (!resolved.authEmail) return "resolver_missing_authEmail";
+    if (resolved.role !== account.expectedRole) return `resolver_role_${resolved.role ?? "missing"}`;
+    if (account.expectedRole === "owner" && !resolved.businessId) return "resolver_missing_businessId";
+    if (account.username === "superadmin" && !resolved.authEmail.endsWith("@users.berberrandevu.internal")) {
+        return "resolver_unexpected_email_domain";
+    }
+    return null;
+}
+
+async function verifyAccount(account, password) {
+    const result = {
+        username: account.username,
+        resolverStatus: null,
+        resolverError: null,
+        expectedRole: account.expectedRole,
+        resolvedEmail: null,
+        resolvedBusinessId: null,
+        firebaseSignIn: false,
+        firebaseErrorCode: null,
+        uid: null,
+        idTokenPresent: false,
+        superAdminClaim: null,
+        ok: false
+    };
+
+    if (!password) {
+        result.resolverError = "missing_local_password";
+        return result;
+    }
+
+    const resolved = await resolveUsername(account.username, account.roleHint);
+    result.resolverStatus = resolved.httpStatus;
+    result.resolverError = resolved.error;
+    result.resolvedEmail = resolved.authEmail;
+    result.resolvedBusinessId = resolved.businessId;
+
+    const shapeError = validateResolverShape(account, resolved);
+    if (shapeError) {
+        result.resolverError = shapeError;
+        return result;
+    }
+
+    const signIn = await firebaseSignIn(resolved.authEmail, password);
+    result.firebaseSignIn = signIn.ok;
+    result.firebaseErrorCode = signIn.errorCode;
+    result.uid = signIn.uid;
+    result.idTokenPresent = signIn.idTokenPresent;
+    result.superAdminClaim = account.expectedRole === "superAdmin" ? signIn.superAdminClaim : null;
+
+    result.ok = signIn.ok
+        && signIn.idTokenPresent
+        && (account.expectedRole !== "superAdmin" || signIn.superAdminClaim === true);
+
+    return result;
 }
 
 async function main() {
-    const accounts = loadAccounts();
-    const browser = await chromium.launch({ headless: true });
+    const passwords = loadPasswordMap();
     const results = [];
 
-    for (const account of accounts) {
-        const page = await browser.newPage();
-        try {
-            const ok = account.mode === "superAdmin"
-                ? await verifySuperAdmin(page, account)
-                : await verifyOwner(page, account);
-            results.push({ username: account.username, ok: Boolean(ok) });
-        } catch {
-            results.push({ username: account.username, ok: false });
-        } finally {
-            await page.close();
-        }
-        account.password = "";
+    for (const account of ACCOUNTS) {
+        const password = passwords.get(account.username) || "";
+        results.push(await verifyAccount(account, password));
     }
 
-    await browser.close();
-    const allOk = results.every((r) => r.ok);
-    console.log(JSON.stringify({ ok: allOk, results }, null, 2));
-    process.exitCode = allOk ? 0 : 1;
+    for (const account of ACCOUNTS) {
+        const entry = passwords.get(account.username);
+        if (entry) passwords.set(account.username, "");
+    }
+
+    const ok = results.every((r) => r.ok);
+    console.log(JSON.stringify({ ok, baseUrl: BASE, results }, null, 2));
+    process.exitCode = ok ? 0 : 1;
 }
 
-main();
+main().catch((err) => {
+    console.error(JSON.stringify({ ok: false, error: err?.message || "diagnostic_failed" }));
+    process.exit(1);
+});

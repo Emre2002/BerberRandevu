@@ -1,5 +1,6 @@
-# Sync production Firebase Auth passwords for superadmin, altinmakas, akkus.
+# Sync production Firebase Auth passwords for superadmin, bedirhan, altinmakas, akkus.
 # Run in a normal Windows PowerShell window. Passwords are never echoed.
+Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 Set-Location "C:\Projects\BerberRandevu-security"
 
@@ -13,11 +14,25 @@ function Read-SecurePlain([string]$Prompt) {
     }
 }
 
+function Test-PasswordPolicy([string]$AccountLabel, [string]$Password) {
+    if ([string]::IsNullOrWhiteSpace($Password)) {
+        throw "$AccountLabel password cannot be empty."
+    }
+    if ($Password.Length -lt 6) {
+        throw "$AccountLabel password must be at least 6 characters."
+    }
+    if ($Password -ne $Password.Trim()) {
+        throw "$AccountLabel password cannot start or end with whitespace."
+    }
+}
+
 function Read-ConfirmedPassword([string]$AccountLabel) {
     while ($true) {
         $first = Read-SecurePlain "$AccountLabel new password"
-        if ([string]::IsNullOrWhiteSpace($first)) {
-            Write-Host "$AccountLabel password cannot be empty."
+        try {
+            Test-PasswordPolicy $AccountLabel $first
+        } catch {
+            Write-Host $_.Exception.Message
             continue
         }
         $confirm = Read-SecurePlain "Confirm $AccountLabel password"
@@ -39,64 +54,91 @@ function Set-RestrictedFileAcl([string]$Path) {
     }
 }
 
+function Resolve-OwnerBusinessId([string]$Username) {
+    $payload = @{ username = $Username } | ConvertTo-Json -Compress
+    $response = Invoke-RestMethod -Method Post -Uri "https://berberv1.vercel.app/api/resolve-auth-identifier" -ContentType "application/json" -Body $payload
+    if (-not $response.authEmail -or -not $response.businessId) {
+        throw "Could not resolve businessId for $Username."
+    }
+    return [string]$response.businessId
+}
+
 $superPass = $null
+$bedirhanPass = $null
 $altinPass = $null
 $akkusPass = $null
-$bedirhanPass = $null
+$syncSummary = @()
 
 try {
+    Write-Host "Enter new passwords for four production accounts."
     $superPass = Read-ConfirmedPassword "superadmin"
+    $bedirhanPass = Read-ConfirmedPassword "bedirhan"
     $altinPass = Read-ConfirmedPassword "altinmakas"
     $akkusPass = Read-ConfirmedPassword "akkus"
 
     $payload = @{
         accounts = @(
             @{ username = "superadmin"; password = $superPass; roleHint = "superAdmin" },
+            @{ username = "bedirhan"; password = $bedirhanPass; roleHint = "owner" },
             @{ username = "altinmakas"; password = $altinPass; roleHint = "owner" },
             @{ username = "akkus"; password = $akkusPass; roleHint = "owner" }
         )
     } | ConvertTo-Json -Compress
 
-    $payload | node "scripts/sync-production-auth-passwords.mjs"
-    if ($LASTEXITCODE -ne 0) { throw "Firebase Auth password sync failed." }
+    $syncOutput = $payload | node "scripts/sync-production-auth-passwords.mjs"
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host $syncOutput
+        throw "Firebase Auth password sync failed."
+    }
+
+    $parsed = $syncOutput | ConvertFrom-Json
+    foreach ($entry in $parsed.results) {
+        $syncSummary += [pscustomobject]@{
+            username = $entry.username
+            ok = [bool]$entry.ok
+            updated = [bool]$entry.updated
+            errorCode = $entry.errorCode
+        }
+    }
+
+    if (-not $parsed.ok) {
+        $syncSummary | Format-Table -AutoSize
+        throw "One or more accounts failed to sync."
+    }
 
     $saFile = ".local-private/superadmin-credentials.txt"
     $csvFile = ".local-private/business-login-credentials.csv"
 
     if (-not (Test-Path ".local-private")) { New-Item -ItemType Directory -Path ".local-private" | Out-Null }
 
-    if (Test-Path $csvFile) {
-        $bedirhanLine = Get-Content $csvFile | Where-Object { $_ -match ",bedirhan," } | Select-Object -First 1
-        if ($bedirhanLine) {
-            $bedirhanPass = ($bedirhanLine.Split(",")[2]).Trim()
-        }
-    }
+    $bedirhanBusinessId = Resolve-OwnerBusinessId "bedirhan"
+    $altinBusinessId = Resolve-OwnerBusinessId "altinmakas"
+    $akkusBusinessId = Resolve-OwnerBusinessId "akkus"
 
     $superContent = @("Username=superadmin", "Password=$superPass") -join [Environment]::NewLine
     [System.IO.File]::WriteAllText((Resolve-Path .).Path + "\$saFile", $superContent, [System.Text.UTF8Encoding]::new($false))
 
-    $csvLines = @("businessName,username,temporaryPassword,businessId,accountStatus")
-    if ($bedirhanPass) {
-        $csvLines += "X-Men,bedirhan,$bedirhanPass,x-men,active"
-    } else {
-        $existing = Get-Content $csvFile -ErrorAction SilentlyContinue | Where-Object { $_ -match ",bedirhan," } | Select-Object -First 1
-        if ($existing) { $csvLines += $existing }
-    }
-    $csvLines += "Altın Makas,altinmakas,$altinPass,altinmakas,active"
-    $csvLines += "Akkus,akkus,$akkusPass,akkus,active"
+    $csvLines = @(
+        "businessName,username,temporaryPassword,businessId,accountStatus",
+        "X-Men,bedirhan,$bedirhanPass,$bedirhanBusinessId,active",
+        "Altın Makas,altinmakas,$altinPass,$altinBusinessId,active",
+        "Akkus,akkus,$akkusPass,$akkusBusinessId,active"
+    )
     [System.IO.File]::WriteAllText((Resolve-Path .).Path + "\$csvFile", ($csvLines -join [Environment]::NewLine), [System.Text.UTF8Encoding]::new($false))
 
     Set-RestrictedFileAcl (Resolve-Path $saFile).Path
     Set-RestrictedFileAcl (Resolve-Path $csvFile).Path
 
-    Write-Host "Password sync completed for superadmin, altinmakas, akkus."
+    Write-Host "Password sync summary:"
+    $syncSummary | Format-Table -AutoSize
     Write-Host "Run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-production-final-validation.ps1"
 } finally {
     $superPass = $null
+    $bedirhanPass = $null
     $altinPass = $null
     $akkusPass = $null
-    $bedirhanPass = $null
     Remove-Item Env:SMOKE_SA_PASS -ErrorAction SilentlyContinue
+    Remove-Item Env:SMOKE_PASS_BEDIRHAN -ErrorAction SilentlyContinue
     Remove-Item Env:SMOKE_PASS_ALTINMAKAS -ErrorAction SilentlyContinue
     Remove-Item Env:SMOKE_PASS_AKKUS -ErrorAction SilentlyContinue
 }

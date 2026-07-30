@@ -37,10 +37,11 @@ describe("owner calendar and messaging security", () => {
     });
 
     it("password sync script never uses CLI password args or persistent env", () => {
-        assert.match(syncSrc, /readStdinJson/);
+        assert.match(syncSrc, /readStdinJson|from-local-credentials/);
         assert.doesNotMatch(syncSrc, /process\.argv.*password/i);
         assert.doesNotMatch(syncPs1, /\$env:.*PASS\s*=/);
         assert.match(syncPs1, /\bfinally\b/);
+        assert.match(syncPs1, /Set-StrictMode/);
     });
 
     it("password sync preserves superadmin claim path", () => {

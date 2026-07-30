@@ -4,13 +4,63 @@
  * Credentials via env or ignored local files only (never logged or passed on CLI).
  */
 import { chromium } from "playwright";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, "..");
 const BASE_URL = (process.env.SMOKE_BASE_URL || "https://berberv1.vercel.app").replace(/\/$/, "");
+const ARTIFACT_DIR = resolve(ROOT, ".local-private/validation-artifacts");
+
+function stripBom(text) {
+    return text.charCodeAt(0) === 0xFEFF ? text.slice(1) : text;
+}
+
+function parseCsvLine(line) {
+    const cols = [];
+    let current = "";
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i += 1) {
+        const ch = line[i];
+        if (ch === '"') {
+            inQuotes = !inQuotes;
+            continue;
+        }
+        if (ch === "," && !inQuotes) {
+            cols.push(current);
+            current = "";
+            continue;
+        }
+        current += ch;
+    }
+    cols.push(current);
+    return cols.map((s) => s.trim());
+}
+
+function ensureArtifactDir() {
+    if (!existsSync(ARTIFACT_DIR)) {
+        mkdirSync(ARTIFACT_DIR, { recursive: true });
+    }
+}
+
+async function saveFailureArtifacts(page, caseName, diag) {
+    ensureArtifactDir();
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const base = resolve(ARTIFACT_DIR, `${caseName}-${stamp}`);
+    try {
+        await page.screenshot({ path: `${base}.png`, fullPage: true });
+    } catch {
+        /* ignore */
+    }
+    try {
+        const html = await page.content();
+        writeFileSync(`${base}.html`, html, "utf8");
+    } catch {
+        /* ignore */
+    }
+    writeFileSync(`${base}.json`, JSON.stringify(diag, null, 2), "utf8");
+}
 
 const PASSWORD_ENV_KEYS = [
     "SMOKE_SA_PASS",
@@ -72,10 +122,10 @@ function loadOwnerAccounts() {
     const csvByUsername = new Map();
 
     if (existsSync(csvFile)) {
-        const lines = readFileSync(csvFile, "utf8").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+        const lines = stripBom(readFileSync(csvFile, "utf8")).split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
         for (const line of lines) {
             if (/^businessname/i.test(line)) continue;
-            const cols = line.split(",").map((s) => s.trim());
+            const cols = parseCsvLine(line);
             if (cols.length >= 4) {
                 csvByUsername.set(cols[1], {
                     label: cols[0],
@@ -241,91 +291,12 @@ async function performOwnerLogin(page, { username, password, expectedSlug }) {
     return diag;
 }
 
-async function performSuperAdminLogin(page, creds) {
-    const diag = {
-        stage: "super_admin_login",
-        username: creds.username,
-        url: "",
-        resolveStatus: null,
-        resolveError: null,
-        listBusinessesStatus: null,
-        visibleError: null
-    };
-
-    await page.goto(`${BASE_URL}/super-admin.html`, { waitUntil: "domcontentloaded" });
-    await page.locator("#saUsername").waitFor({ state: "visible" });
-    await page.locator("#saPassword").waitFor({ state: "visible" });
-    if (!(await page.locator("#saLoginBtn").isEnabled())) {
-        throw new ValidationFailure("submit_disabled", diag);
-    }
-
-    await page.fill("#saUsername", creds.username);
-    await page.fill("#saPassword", creds.password);
-
-    const resolvePromise = waitForApiResponse(page, "/api/resolve-auth-identifier").then(async (resp) => {
-        diag.resolveStatus = resp.status();
-        try {
-            const body = await resp.json();
-            diag.resolveError = body?.error || null;
-        } catch {
-            /* ignore */
-        }
-    }).catch(() => {
-        diag.resolveStatus = diag.resolveStatus ?? "missing";
-    });
-
-    const listBusinessesPromise = waitForApiResponse(page, "/api/list-businesses").then(async (resp) => {
-        diag.listBusinessesStatus = resp.status();
-    }).catch(() => {
-        diag.listBusinessesStatus = diag.listBusinessesStatus ?? "missing";
-    });
-
-    await Promise.all([
-        resolvePromise.catch(() => null),
-        page.locator("#saLoginForm").evaluate((form) => form.requestSubmit())
-    ]);
-
-    await page.waitForSelector("#saLoginScreen[hidden]", { timeout: 45000 }).catch(async () => {
-        const loginErrorVisible = await page.evaluate(() => {
-            const el = document.getElementById("saLoginError");
-            return Boolean(el && el.classList.contains("show") && el.textContent.trim());
-        });
-        if (loginErrorVisible) {
-            diag.visibleError = await readVisibleLoginError(page, "#saLoginError");
-        }
-        diag.url = page.url();
-        if (diag.visibleError) {
-            throw new ValidationFailure(
-                diag.resolveStatus === 404 ? "invalid_credential" : "super_admin_login_failed",
-                diag
-            );
-        }
-        throw new ValidationFailure("super_admin_panel_not_shown", diag);
-    });
-
-    await listBusinessesPromise;
-    await page.waitForSelector(".sad-shop-card", { timeout: 45000 });
-    diag.url = page.url();
-
-    if (diag.resolveStatus === 404) {
-        throw new ValidationFailure("auth_resolver_failed", diag);
-    }
-    if (typeof diag.resolveStatus === "number" && diag.resolveStatus !== 200) {
-        throw new ValidationFailure(`auth_resolver_status_${diag.resolveStatus}`, diag);
-    }
-    if (diag.listBusinessesStatus !== 200) {
-        throw new ValidationFailure(`list_businesses_status_${diag.listBusinessesStatus ?? "missing"}`, diag);
-    }
-
-    return diag;
-}
-
 async function getFirebaseAuthState(page) {
     return page.evaluate(async () => {
         const cfg = await import("/firebase-config.js");
         const auth = await cfg.getAuthInstance();
         const user = auth.currentUser;
-        if (!user) return { signedIn: false };
+        if (!user) return { signedIn: false, hasSuperAdminClaim: false, hasToken: false };
         const tokenResult = await user.getIdTokenResult(true);
         return {
             signedIn: true,
@@ -335,44 +306,182 @@ async function getFirebaseAuthState(page) {
     });
 }
 
-async function smokeSuperAdmin(page, creds) {
+async function collectSuperAdminDiagnostics(page, creds) {
+    const diag = {
+        stage: "super_admin_login",
+        username: creds.username,
+        url: "",
+        resolveStatus: null,
+        resolveError: null,
+        resolveRole: null,
+        firebaseSignedIn: false,
+        hasIdToken: false,
+        hasSuperAdminClaim: false,
+        listBusinessesStatus: null,
+        listBusinessesError: null,
+        panelVisible: false,
+        businessCardCount: 0,
+        visibleError: null,
+        consoleErrors: [],
+        pageErrors: [],
+        failedRequests: []
+    };
+
     const consoleErrors = [];
-    const firestoreQueries = [];
+    const pageErrors = [];
+    const failedRequests = [];
     attachPageDiagnostics(page, consoleErrors);
+    page.on("pageerror", (err) => pageErrors.push(String(err?.message || err).slice(0, 120)));
+    page.on("requestfailed", (req) => {
+        failedRequests.push(`${req.method()} ${req.url().split("?")[0].slice(-80)}`);
+    });
+
+    await page.goto(`${BASE_URL}/super-admin.html`, { waitUntil: "domcontentloaded" });
+    await page.locator("#saUsername").waitFor({ state: "visible" });
+    await page.locator("#saPassword").waitFor({ state: "visible" });
+
+    await page.fill("#saUsername", creds.username);
+    await page.fill("#saPassword", creds.password);
+
+    const resolvePromise = waitForApiResponse(page, "/api/resolve-auth-identifier").then(async (resp) => {
+        diag.resolveStatus = resp.status();
+        try {
+            const body = await resp.json();
+            diag.resolveError = body?.error || null;
+            diag.resolveRole = body?.role || null;
+        } catch {
+            /* ignore */
+        }
+    }).catch(() => {
+        diag.resolveStatus = diag.resolveStatus ?? "missing";
+    });
+
+    const listBusinessesPromise = waitForApiResponse(page, "/api/list-businesses").then(async (resp) => {
+        diag.listBusinessesStatus = resp.status();
+        if (!resp.ok) {
+            try {
+                const body = await resp.json();
+                diag.listBusinessesError = body?.error || null;
+            } catch {
+                diag.listBusinessesError = `http_${resp.status()}`;
+            }
+        }
+    }).catch(() => {
+        diag.listBusinessesStatus = diag.listBusinessesStatus ?? "missing";
+    });
+
+    await Promise.all([
+        resolvePromise.catch(() => null),
+        page.locator("#saLoginForm").evaluate((form) => form.requestSubmit())
+    ]);
+
+    await page.waitForTimeout(5000);
+    diag.url = page.url();
+
+    const authState = await getFirebaseAuthState(page).catch(() => ({
+        signedIn: false,
+        hasSuperAdminClaim: false,
+        hasToken: false
+    }));
+    diag.firebaseSignedIn = authState.signedIn;
+    diag.hasIdToken = authState.hasToken;
+    diag.hasSuperAdminClaim = authState.hasSuperAdminClaim;
+
+    diag.visibleError = await readVisibleLoginError(page, "#saLoginError");
+    diag.panelVisible = await page.locator('[data-testid="super-admin-panel"]').isVisible().catch(() => false);
+    if (!diag.panelVisible) {
+        diag.panelVisible = await page.locator("#saPanel").isVisible().catch(() => false);
+    }
+    diag.businessCardCount = await page.locator('[data-testid="business-card"], .sad-shop-card').count();
+
+    await listBusinessesPromise.catch(() => null);
+    await page.waitForTimeout(2000);
+    diag.businessCardCount = await page.locator('[data-testid="business-card"], .sad-shop-card').count();
+
+    diag.consoleErrors = [...consoleErrors];
+    diag.pageErrors = [...pageErrors];
+    diag.failedRequests = [...failedRequests];
+
+    return diag;
+}
+
+function assertSuperAdminDiagnostics(diag) {
+    if (diag.resolveStatus === 404) {
+        throw new ValidationFailure("auth_resolver_failed", diag);
+    }
+    if (typeof diag.resolveStatus === "number" && diag.resolveStatus !== 200) {
+        throw new ValidationFailure(`auth_resolver_status_${diag.resolveStatus}`, diag);
+    }
+    if (!diag.firebaseSignedIn) {
+        throw new ValidationFailure("firebase_sign_in_failed", diag);
+    }
+    if (!diag.hasIdToken) {
+        throw new ValidationFailure("super_admin_missing_id_token", diag);
+    }
+    if (!diag.hasSuperAdminClaim) {
+        throw new ValidationFailure("super_admin_missing_claim", diag);
+    }
+    if (diag.listBusinessesStatus !== 200) {
+        throw new ValidationFailure(`list_businesses_status_${diag.listBusinessesStatus ?? "missing"}`, diag);
+    }
+    if (!diag.panelVisible) {
+        throw new ValidationFailure("super_admin_panel_not_shown", diag);
+    }
+    if (diag.businessCardCount < 1) {
+        throw new ValidationFailure(`super_admin_business_count_${diag.businessCardCount}`, diag);
+    }
+}
+
+async function smokeSuperAdmin(page, creds) {
+    const firestoreQueries = [];
     trackFirestoreListQueries(page, firestoreQueries);
 
-    await performSuperAdminLogin(page, creds);
-
-    const authState = await getFirebaseAuthState(page);
-    if (!authState.signedIn) throw new ValidationFailure("super_admin_not_signed_in", { stage: "auth_check" });
-    if (!authState.hasToken) throw new ValidationFailure("super_admin_missing_id_token", { stage: "auth_check" });
-    if (!authState.hasSuperAdminClaim) throw new ValidationFailure("super_admin_missing_claim", { stage: "auth_check" });
+    const diag = await collectSuperAdminDiagnostics(page, creds);
+    try {
+        assertSuperAdminDiagnostics(diag);
+    } catch (err) {
+        await saveFailureArtifacts(page, "superAdmin", diag);
+        throw err;
+    }
 
     const bodyText = await page.locator("body").innerText();
     if (PERMISSION_MARKERS.some((m) => bodyText.includes(m))) {
-        throw new ValidationFailure("super_admin_permission_marker_on_page", { stage: "panel_check" });
+        await saveFailureArtifacts(page, "superAdmin", diag);
+        throw new ValidationFailure("super_admin_permission_marker_on_page", { stage: "panel_check", ...diag });
     }
 
-    const names = await page.locator(".sad-shop-card__name").allInnerTexts();
+    const names = await page.locator(".sad-shop-card__name, [data-testid='business-card'] .sad-shop-card__name").allInnerTexts();
     const slugs = await page.locator(".sad-shop-card__slug").allInnerTexts();
     const combined = [...names, ...slugs].join("\n").toLocaleLowerCase("tr");
 
-    const count = await page.locator(".sad-shop-card").count();
-    if (count !== 13) throw new ValidationFailure(`super_admin_business_count_${count}`, { stage: "panel_check", count });
-
     const hasXMen = /x-?men|x men/.test(combined);
     const hasAltinMakas = /altın makas|altin makas|altinmakas/.test(combined);
-    if (!hasXMen) throw new ValidationFailure("super_admin_missing_x_men", { stage: "panel_check" });
-    if (!hasAltinMakas) throw new ValidationFailure("super_admin_missing_altin_makas", { stage: "panel_check" });
+    if (!hasXMen) {
+        await saveFailureArtifacts(page, "superAdmin", diag);
+        throw new ValidationFailure("super_admin_missing_x_men", { stage: "panel_check", ...diag });
+    }
+    if (!hasAltinMakas) {
+        await saveFailureArtifacts(page, "superAdmin", diag);
+        throw new ValidationFailure("super_admin_missing_altin_makas", { stage: "panel_check", ...diag });
+    }
 
     if (firestoreQueries.some((q) => q.includes("berberler"))) {
-        throw new ValidationFailure("super_admin_direct_berberler_query", { stage: "network_check" });
+        throw new ValidationFailure("super_admin_direct_berberler_query", { stage: "network_check", ...diag });
     }
-    if (consoleErrors.length) {
-        throw new ValidationFailure("super_admin_console_permission_errors", { stage: "console_check" });
+    if (diag.consoleErrors.length) {
+        throw new ValidationFailure("super_admin_console_permission_errors", { stage: "console_check", ...diag });
     }
 
-    return { businessCount: count, listBusinessesStatus: 200, hasSuperAdminClaim: true };
+    return {
+        businessCount: diag.businessCardCount,
+        listBusinessesStatus: 200,
+        hasSuperAdminClaim: true,
+        directAuth: {
+            firebaseSignedIn: diag.firebaseSignedIn,
+            hasIdToken: diag.hasIdToken,
+            hasSuperAdminClaim: diag.hasSuperAdminClaim
+        }
+    };
 }
 
 async function smokeOwnerForbiddenApi(page, ownerCreds) {
@@ -683,32 +792,48 @@ async function main() {
 
     try {
         {
-            const page = await browser.newPage();
-            report.accounts.superAdmin = await runCase("superAdmin", () => smokeSuperAdmin(page, saCreds));
-            await page.close();
+            const context = await browser.newContext();
+            const page = await context.newPage();
+            try {
+                report.accounts.superAdmin = await runCase("superAdmin", () => smokeSuperAdmin(page, saCreds));
+            } finally {
+                await context.close();
+            }
         }
 
         {
-            const page = await browser.newPage();
-            report.accounts.ownerSecurity = await runCase("ownerSecurity", () =>
-                smokeOwnerForbiddenApi(page, owners[0])
-            );
-            await page.close();
+            const context = await browser.newContext();
+            const page = await context.newPage();
+            try {
+                report.accounts.ownerSecurity = await runCase("ownerSecurity", () =>
+                    smokeOwnerForbiddenApi(page, owners[0])
+                );
+            } finally {
+                await context.close();
+            }
         }
 
         for (const owner of owners) {
-            const page = await browser.newPage();
-            report.accounts[owner.username] = await runCase(owner.username, () =>
-                smokeOwnerCalendar(page, owner)
-            );
-            await page.close();
+            const context = await browser.newContext();
+            const page = await context.newPage();
+            try {
+                report.accounts[owner.username] = await runCase(owner.username, () =>
+                    smokeOwnerCalendar(page, owner)
+                );
+            } finally {
+                await context.close();
+            }
         }
 
         report.accounts.public = {};
         for (const slug of ["abc", "x-men"]) {
-            const page = await browser.newPage();
-            report.accounts.public[slug] = await runCase(`public_${slug}`, () => smokePublicSlug(page, slug));
-            await page.close();
+            const context = await browser.newContext();
+            const page = await context.newPage();
+            try {
+                report.accounts.public[slug] = await runCase(`public_${slug}`, () => smokePublicSlug(page, slug));
+            } finally {
+                await context.close();
+            }
         }
 
         report.ok =

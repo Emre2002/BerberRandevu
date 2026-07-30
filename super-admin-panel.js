@@ -286,7 +286,7 @@ function getPanelHtml() {
         </section>`;
 
     return `
-        <div id="saPanel" class="sa-panel">
+        <div id="saPanel" class="sa-panel" data-testid="super-admin-panel">
             <header class="sa-header">
                 <h1 class="sa-header__title">Süper Admin <span class="sa-header__badge">SaaS</span></h1>
                 <div class="sa-header__actions">
@@ -834,7 +834,7 @@ function cardHtml(b) {
     const selectedClass = dashView.selected.has(b.slug) ? " is-selected" : "";
     const loc = [b.city, b.district].filter(Boolean).join(" / ") || "—";
 
-    return `<article class="sad-shop-card${selectedClass}">
+    return `<article class="sad-shop-card${selectedClass}" data-testid="business-card">
         <div class="sad-shop-card__top">
             <label class="sad-shop-card__check" title="Seç">
                 <input type="checkbox" class="sad-row-check sad-check-pro" data-check-slug="${b.slug}" ${checked}>

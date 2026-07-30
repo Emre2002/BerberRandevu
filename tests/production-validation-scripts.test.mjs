@@ -75,9 +75,11 @@ describe("production validation credential security", () => {
         assert.match(src, /\bfinally\b[\s\S]*clearPasswordEnv\(\)/);
     });
 
-    it("validation script does not enable playwright trace, screenshot, or video capture", () => {
+    it("validation script captures failure artifacts only under ignored local-private path", () => {
         const src = read(VALIDATION_MJS);
-        assert.doesNotMatch(src, /tracing\.|recordVideo|screenshot\(/i);
+        assert.match(src, /\.local-private\/validation-artifacts/);
+        assert.match(src, /saveFailureArtifacts/);
+        assert.doesNotMatch(src, /tracing\.|recordVideo/i);
         assert.match(src, /headless:\s*true/);
     });
 
@@ -119,7 +121,8 @@ describe("production validation credential security", () => {
 
     it("validation script uses super-admin panel DOM instead of stale globals", () => {
         const src = read(VALIDATION_MJS);
-        assert.match(src, /#saLoginScreen\[hidden\]/);
+        assert.match(src, /data-testid="super-admin-panel"/);
+        assert.match(src, /data-testid="business-card"/);
         assert.match(src, /\.sad-shop-card/);
         assert.doesNotMatch(src, /window\.[A-Za-z0-9_]+\s*&&/);
     });

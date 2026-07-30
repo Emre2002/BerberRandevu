@@ -12,3 +12,7 @@ firestore.staging.rules
 firestore.indexes.json
 SECURITY_BASELINE_MANIFEST.json
 firebase-config.example.js
+firebase-debug.log
+firebase-debug.log*
+*-debug.log
+.local-private/

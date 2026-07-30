@@ -13,7 +13,9 @@
     "test:smoke:calendar": "node scripts/production-calendar-smoke.mjs",
     "test:smoke:auth": "node scripts/production-auth-smoke.mjs",
     "test:validation:scripts": "node --test tests/production-validation-scripts.test.mjs",
-    "test:calendar:security": "node --test tests/calendar-owner-security.test.mjs"
+    "test:calendar:security": "node --test tests/calendar-owner-security.test.mjs",
+    "sync:admin-check": "node scripts/sync-production-auth-passwords.mjs check-admin-credentials",
+    "sync:auth-passwords": "node scripts/sync-production-auth-passwords.mjs from-local-credentials"
   },
   "dependencies": {
     "firebase-admin": "^12.7.0"

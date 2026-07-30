@@ -97,14 +97,13 @@ loginForm?.addEventListener("submit", async (e) => {
     try {
         const username = document.getElementById("saUsername").value;
         const password = document.getElementById("saPassword").value;
-        const valid = await validateSuperAdminLogin(username, password);
-
-        if (!valid) {
-            loginError?.classList.add("show");
-            return;
-        }
 
         if (shouldUseEmulatorAuthLogin()) {
+            const valid = await validateSuperAdminLogin(username, password);
+            if (!valid) {
+                loginError?.classList.add("show");
+                return;
+            }
             loginSuperAdmin();
             await showPanel();
             return;

@@ -16,3 +16,5 @@ secrets/
 .gcloud/
 .vercel
 .env*
+
+node_modules/
