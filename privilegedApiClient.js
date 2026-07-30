@@ -11,6 +11,7 @@ const API_ROUTE_MAP = {
     getOwnerBusinessProfile: "/api/get-owner-profile",
     updateOwnerProfile: "/api/update-owner-profile",
     createAppointment: "/api/public/create-appointment",
+    createOwnerAppointment: "/api/owner/create-appointment",
     createOwnerAccount: "/api/create-owner-account"
 };
 
@@ -113,4 +114,8 @@ export async function setOwnerPasswordViaApi(businessId, password) {
 
 export async function setOwnerAccountStatusViaApi(businessId, active) {
     return callPrivilegedApi("setOwnerAccountStatus", { businessId, active });
+}
+
+export async function createOwnerAppointmentViaApi(payload) {
+    return callPrivilegedApi("createOwnerAppointment", payload, { auth: true });
 }

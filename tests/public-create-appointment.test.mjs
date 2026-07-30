@@ -42,12 +42,24 @@ describe("public booking client adapter", () => {
         assert.doesNotMatch(src, /collection\(db, "appointments"\)/);
     });
 
-    it("appointmentService defaults to server API without Firestore fallback", () => {
+    it("appointmentService uses server API without Firestore fallback", () => {
         const src = readFileSync(resolve(ROOT, "appointmentService.js"), "utf8");
         assert.match(src, /createAppointmentViaServerApi/);
         assert.match(src, /submitPublicAppointment/);
-        assert.doesNotMatch(src, /falling back to client path/);
+        assert.match(src, /createAppointmentViaOwnerApi/);
         assert.doesNotMatch(src, /createAppointmentViaCallable/);
+        assert.doesNotMatch(src, /falling back to client path/);
+    });
+
+    it("admin calendar uses authenticated owner server API", () => {
+        const src = readFileSync(resolve(ROOT, "app.js"), "utf8");
+        assert.match(src, /forceOwner:\s*true/);
+    });
+
+    it("firebase-config does not expose createAppointment callable", () => {
+        const src = readFileSync(resolve(ROOT, "firebase-config.js"), "utf8");
+        assert.doesNotMatch(src, /getCreateAppointmentCallable/);
+        assert.doesNotMatch(src, /createAppointmentCallable/);
     });
 
     it("app.js passes idempotencyKey on customer booking submit", () => {

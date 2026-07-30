@@ -1529,7 +1529,7 @@ function initAdminPage() {
                             time,
                             status: "confirmed",
                             musteriNotu: "",
-                            forceClient: true
+                            forceOwner: true
                         });
                         closeModal();
                         showToast(`${customerName} için randevu kaydedildi.`);
