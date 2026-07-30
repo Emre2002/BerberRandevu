@@ -9,19 +9,40 @@ function getApiBaseUrl() {
     return PRODUCTION_BASE_URL;
 }
 
+const GENERIC_RATE_LIMIT_MESSAGE =
+    "Kısa sürede çok fazla işlem yapıldı. Lütfen bir süre sonra tekrar deneyin.";
+
+export function formatRateLimitMessage(retryAfterSeconds) {
+    const seconds = Number(retryAfterSeconds);
+    if (!Number.isFinite(seconds) || seconds <= 0) {
+        return GENERIC_RATE_LIMIT_MESSAGE;
+    }
+    if (seconds <= 60) {
+        return `Çok fazla deneme yapıldı. Yaklaşık ${Math.ceil(seconds)} saniye sonra tekrar deneyin.`;
+    }
+    const minutes = Math.ceil(seconds / 60);
+    return `Çok fazla deneme yapıldı. Yaklaşık ${minutes} dakika sonra tekrar deneyin.`;
+}
+
 const API_ERROR_MESSAGES = {
     invalid_request: "Randevu oluşturulamadı. Lütfen bilgileri kontrol edip tekrar deneyin.",
     business_not_found: "İşletme bulunamadı.",
     slot_unavailable: "Bu saat kısa süre önce doldu. Lütfen farklı bir saat seçin.",
-    rate_limited: "Kısa sürede çok fazla işlem yapıldı. Lütfen daha sonra tekrar deneyin.",
+    rate_limited: GENERIC_RATE_LIMIT_MESSAGE,
     internal_error: "Randevu oluşturulamadı. Lütfen tekrar deneyin.",
     booking_failed: "Şu anda randevu oluşturulamadı. Lütfen tekrar deneyin."
 };
 
-function mapApiError(code) {
-    const message = API_ERROR_MESSAGES[code] || API_ERROR_MESSAGES.booking_failed;
+function mapApiError(code, payload = {}) {
+    let message = API_ERROR_MESSAGES[code] || API_ERROR_MESSAGES.booking_failed;
+    if (code === "rate_limited") {
+        message = formatRateLimitMessage(payload.retryAfterSeconds);
+    }
     const err = new Error(message);
     err.code = code || "booking_failed";
+    if (Number.isFinite(payload.retryAfterSeconds)) {
+        err.retryAfterSeconds = payload.retryAfterSeconds;
+    }
     return err;
 }
 
@@ -67,7 +88,7 @@ export async function submitPublicAppointment(payload) {
     }
 
     if (!response.ok) {
-        throw mapApiError(data?.code || "booking_failed");
+        throw mapApiError(data?.code || "booking_failed", data || {});
     }
 
     if (!data?.ok || !data?.appointmentId) {

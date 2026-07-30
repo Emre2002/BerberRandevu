@@ -91,9 +91,13 @@ describe("booking validation helpers", () => {
             status: 409,
             body: { ok: false, code: "slot_unavailable" }
         });
-        assert.deepEqual(mapBookingErrorToHttp({ code: "rate_limited" }), {
+        assert.deepEqual(mapBookingErrorToHttp({ code: "rate_limited", retryAfterSeconds: 30 }), {
             status: 429,
-            body: { ok: false, code: "rate_limited" }
+            headers: {
+                "Retry-After": "30",
+                "RateLimit-Remaining": "0"
+            },
+            body: { ok: false, code: "rate_limited", retryAfterSeconds: 30 }
         });
     });
 });

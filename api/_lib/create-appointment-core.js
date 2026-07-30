@@ -5,14 +5,13 @@ import {
     validateAvailabilityDate
 } from "./availability.js";
 import {
-    checkIpBarberSuccessLimit,
-    enforceGlobalIpLimit,
-    enforcePhoneAttemptLimit,
-    getHourBucket,
-    hashIp,
-    incrementIpBarberSuccess
+    checkBookingSuccessLimit,
+    enforceBookingAttemptLimit,
+    hashPhoneIdentity,
+    incrementBookingSuccessLimit
 } from "./booking-rate-limit.js";
 import { resolvePublicBusinessSlug } from "./resolve-public-business-slug.js";
+import { buildRateLimitHeaders } from "./http.js";
 
 const INACTIVE_APPOINTMENT_STATUSES = new Set([
     "cancelled",
@@ -279,11 +278,6 @@ export async function createPublicAppointment(db, input, { clientIp = "unknown" 
     const website = String(input.website || "").trim();
     const idempotencyKey = String(input.idempotencyKey || input.requestId || "").trim();
 
-    const ipHash = hashIp(clientIp);
-    const hourBucket = getHourBucket();
-
-    await enforceGlobalIpLimit(db, ipHash, hourBucket);
-
     if (website) {
         const err = new Error("invalid_request");
         err.code = "spam_detected";
@@ -301,6 +295,24 @@ export async function createPublicAppointment(db, input, { clientIp = "unknown" 
         const err = new Error("business_not_found");
         err.code = "business_not_found";
         throw err;
+    }
+
+    const idempotencyDocId = idempotencyKey ? hashIdempotencyKey(idempotencyKey) : null;
+    if (idempotencyDocId) {
+        const idemSnap = await db.collection("appointmentIdempotency").doc(idempotencyDocId).get();
+        if (idemSnap.exists) {
+            const idemData = idemSnap.data() || {};
+            const existingId = String(idemData.appointmentId || "").trim();
+            const idemBusinessId = String(idemData.businessId || "").trim();
+            if (existingId && idemBusinessId === businessId) {
+                return {
+                    ok: true,
+                    appointmentId: existingId,
+                    businessId,
+                    idempotentReplay: true
+                };
+            }
+        }
     }
 
     if (customerName.length < 2 || customerName.length > 80) {
@@ -343,7 +355,7 @@ export async function createPublicAppointment(db, input, { clientIp = "unknown" 
     const normalizedPhone = normalizePhone(phoneRaw);
     const displayPhone = phoneRaw.replace(/\s/g, "");
 
-    await enforcePhoneAttemptLimit(db, businessId, normalizedPhone, hourBucket);
+    await enforceBookingAttemptLimit(db, businessId, normalizedPhone);
 
     const publicSnap = await db.collection("publicBarbers").doc(businessId).get();
     const publicBarber = publicSnap.data() || {};
@@ -388,23 +400,7 @@ export async function createPublicAppointment(db, input, { clientIp = "unknown" 
         throw err;
     }
 
-    await checkIpBarberSuccessLimit(db, businessId, ipHash, hourBucket);
-
-    const idempotencyDocId = idempotencyKey ? hashIdempotencyKey(idempotencyKey) : null;
-    if (idempotencyDocId) {
-        const idemSnap = await db.collection("appointmentIdempotency").doc(idempotencyDocId).get();
-        if (idemSnap.exists) {
-            const existingId = String(idemSnap.data()?.appointmentId || "").trim();
-            if (existingId) {
-                return {
-                    ok: true,
-                    appointmentId: existingId,
-                    businessId,
-                    idempotentReplay: true
-                };
-            }
-        }
-    }
+    await checkBookingSuccessLimit(db, businessId, normalizedPhone, date);
 
     const lockId = slotLockId(businessId, date, time);
     const lockRef = db.collection("appointmentSlotLocks").doc(lockId);
@@ -502,7 +498,7 @@ export async function createPublicAppointment(db, input, { clientIp = "unknown" 
     });
 
     try {
-        await incrementIpBarberSuccess(db, businessId, ipHash, hourBucket);
+        await incrementBookingSuccessLimit(db, businessId, normalizedPhone, date);
     } catch (err) {
         console.warn("[create-appointment] success counter failed:", err?.code || "internal");
     }
@@ -521,7 +517,24 @@ export function mapBookingErrorToHttp(err) {
         return { status: 404, body: { ok: false, code: "business_not_found" } };
     }
     if (code === "rate_limited") {
-        return { status: 429, body: { ok: false, code: "rate_limited" } };
+        const retryAfterSeconds = Number.isFinite(err?.retryAfterSeconds)
+            ? err.retryAfterSeconds
+            : null;
+        const headers = buildRateLimitHeaders({
+            limit: err?.rateLimitLimit,
+            remaining: 0,
+            retryAfterSeconds,
+            resetAtSeconds: err?.rateLimitReset
+        });
+        return {
+            status: 429,
+            headers,
+            body: {
+                ok: false,
+                code: "rate_limited",
+                retryAfterSeconds
+            }
+        };
     }
     if (
         code === "slot_taken"

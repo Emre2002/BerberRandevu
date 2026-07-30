@@ -1,6 +1,7 @@
 import { getAdminDb } from "../_lib/firebase-admin.js";
-import { applyCors, sendError, sendJson } from "../_lib/http.js";
-import { checkRateLimit, getClientIp } from "../_lib/rate-limit.js";
+import { applyCors, sendError, sendJson, sendRateLimited } from "../_lib/http.js";
+import { getClientIp } from "../_lib/rate-limit.js";
+import { enforceAvailabilityBurstLimit } from "../_lib/booking-rate-limit.js";
 import { computePublicAvailability, validateAvailabilityDate } from "../_lib/availability.js";
 import { resolvePublicBusinessSlug } from "../_lib/resolve-public-business-slug.js";
 
@@ -19,8 +20,22 @@ export default async function handler(req, res) {
     }
 
     const ip = getClientIp(req);
-    if (!checkRateLimit(`public-availability:${ip}`, { limit: 120, windowMs: 60_000 })) {
-        sendError(res, 429, "rate_limited", "Too many requests. Please try again later.");
+
+    try {
+        const db = getAdminDb();
+        await enforceAvailabilityBurstLimit(db, ip);
+    } catch (err) {
+        if (err?.code === "rate_limited") {
+            sendRateLimited(res, {
+                retryAfterSeconds: err.retryAfterSeconds,
+                limit: err.rateLimitLimit,
+                remaining: 0,
+                resetAtSeconds: err.rateLimitReset
+            });
+            return;
+        }
+        console.error("[public/availability] burst_limiter_failed");
+        sendError(res, 500, "internal_error", "Availability could not be loaded.");
         return;
     }
 

@@ -2,7 +2,7 @@ import { db, isForceClientBookingQuery } from "./firebase-config.js";
 import { collection, addDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { upsertCustomerOnAppointment, normalizePhone } from "./customerService.js";
 import { notifyNewAppointment } from "./notificationService.js";
-import { submitPublicAppointment, PUBLIC_APPOINTMENT_ERROR_MESSAGES } from "./publicAppointmentClient.js";
+import { submitPublicAppointment, PUBLIC_APPOINTMENT_ERROR_MESSAGES, formatRateLimitMessage } from "./publicAppointmentClient.js";
 import { createOwnerAppointmentViaApi } from "./privilegedApiClient.js";
 
 const INACTIVE_APPOINTMENT_STATUSES = new Set([
@@ -61,6 +61,12 @@ export const CF_BOOKING_ERROR_MESSAGES = BOOKING_ERROR_MESSAGES;
 
 function toUserFacingError(error) {
     const code = String(error?.code || "");
+    if (code === "rate_limited" && Number.isFinite(error?.retryAfterSeconds)) {
+        const mapped = new Error(formatRateLimitMessage(error.retryAfterSeconds));
+        mapped.code = code;
+        mapped.retryAfterSeconds = error.retryAfterSeconds;
+        return mapped;
+    }
     if (code && BOOKING_ERROR_MESSAGES[code]) {
         const mapped = new Error(BOOKING_ERROR_MESSAGES[code]);
         mapped.code = code;

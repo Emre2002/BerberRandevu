@@ -769,6 +769,7 @@ async function initCustomerPage() {
     let selectedSlot = null;
     let phoneDuplicateBlocked = false;
     let bookingInProgress = false;
+    let activeIdempotencyKey = null;
     let lastSubmitAt = 0;
     const bookingFormReadyAt = Date.now();
     const MIN_FORM_MS = 3000;
@@ -796,6 +797,18 @@ async function initCustomerPage() {
         try {
             localStorage.setItem(getPhoneCooldownKey(phone), String(Date.now() + PHONE_COOLDOWN_MS));
         } catch { /* gizli mod */ }
+    }
+
+    function resetBookingIdempotencyKey() {
+        activeIdempotencyKey = null;
+    }
+
+    function getOrCreateBookingIdempotencyKey() {
+        if (activeIdempotencyKey) return activeIdempotencyKey;
+        activeIdempotencyKey = typeof crypto !== "undefined" && crypto.randomUUID
+            ? crypto.randomUUID()
+            : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        return activeIdempotencyKey;
     }
 
     function finishBookingSubmit() {
@@ -1034,6 +1047,7 @@ async function initCustomerPage() {
         document.querySelectorAll(".slot--selected").forEach(s => s.classList.remove("slot--selected"));
         slotEl.classList.add("slot--selected");
         selectedSlot = time;
+        resetBookingIdempotencyKey();
         updateBookButton();
     }
 
@@ -1095,6 +1109,7 @@ async function initCustomerPage() {
         dateInput.addEventListener("change", () => {
             selectedSlot = null;
             phoneDuplicateBlocked = false;
+            resetBookingIdempotencyKey();
             updateBookButton();
             loadAvailableSlots();
             checkPhoneDuplicateForSelectedDate();
@@ -1112,7 +1127,10 @@ async function initCustomerPage() {
         const el = document.getElementById(id);
         if (el) {
             el.addEventListener("input", () => {
-                if (id === "customerPhone") phoneDuplicateBlocked = false;
+                if (id === "customerPhone") {
+                    phoneDuplicateBlocked = false;
+                    resetBookingIdempotencyKey();
+                }
                 updateBookButton();
             });
             el.addEventListener("change", updateBookButton);
@@ -1193,11 +1211,10 @@ async function initCustomerPage() {
                     status: "confirmed",
                     musteriNotu,
                     website: document.getElementById("bookingHoneypot")?.value?.trim() || "",
-                    idempotencyKey: typeof crypto !== "undefined" && crypto.randomUUID
-                        ? crypto.randomUUID()
-                        : `${Date.now()}-${Math.random().toString(36).slice(2)}`
+                    idempotencyKey: getOrCreateBookingIdempotencyKey()
                 });
 
+                resetBookingIdempotencyKey();
                 setPhoneCooldown(phone);
 
                 const successDetails = {

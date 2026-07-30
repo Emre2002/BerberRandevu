@@ -1,6 +1,7 @@
 import { getAdminDb } from "../_lib/firebase-admin.js";
-import { applyCors, readJsonBody, sendJson } from "../_lib/http.js";
-import { checkRateLimit, getClientIp } from "../_lib/rate-limit.js";
+import { applyCors, readJsonBody, sendJson, sendRateLimited } from "../_lib/http.js";
+import { getClientIp } from "../_lib/rate-limit.js";
+import { enforcePublicRouteBurstLimit } from "../_lib/booking-rate-limit.js";
 import {
     createPublicAppointment,
     mapBookingErrorToHttp
@@ -21,8 +22,22 @@ export default async function handler(req, res) {
     }
 
     const ip = getClientIp(req);
-    if (!checkRateLimit(`public-create-appointment:${ip}`, { limit: 30, windowMs: 60_000 })) {
-        sendJson(res, 429, { ok: false, code: "rate_limited" });
+
+    try {
+        const db = getAdminDb();
+        await enforcePublicRouteBurstLimit(db, "public-create-appointment", ip);
+    } catch (err) {
+        if (err?.code === "rate_limited") {
+            sendRateLimited(res, {
+                retryAfterSeconds: err.retryAfterSeconds,
+                limit: err.rateLimitLimit,
+                remaining: 0,
+                resetAtSeconds: err.rateLimitReset
+            });
+            return;
+        }
+        console.error("[public/create-appointment] burst_limiter_failed");
+        sendJson(res, 500, { ok: false, code: "internal_error" });
         return;
     }
 
@@ -42,6 +57,6 @@ export default async function handler(req, res) {
 
         const mapped = mapBookingErrorToHttp(err);
         console.error("[public/create-appointment]", err?.code || "internal_error");
-        sendJson(res, mapped.status, mapped.body);
+        sendJson(res, mapped.status, mapped.body, mapped.headers || {});
     }
 }

@@ -1,5 +1,8 @@
+import { normalizeTrustedClientIp } from "./booking-rate-limit.js";
+
 const buckets = new Map();
 
+/** Process-local burst limiter for non-booking owner/admin routes only. */
 export function checkRateLimit(key, { limit = 60, windowMs = 60_000 } = {}) {
     const now = Date.now();
     const entry = buckets.get(key);
@@ -14,7 +17,13 @@ export function checkRateLimit(key, { limit = 60, windowMs = 60_000 } = {}) {
 export function getClientIp(req) {
     const forwarded = req.headers["x-forwarded-for"];
     if (typeof forwarded === "string" && forwarded.length) {
-        return forwarded.split(",")[0].trim();
+        return normalizeTrustedClientIp(forwarded);
     }
-    return req.socket?.remoteAddress || "unknown";
+    const realIp = req.headers["x-real-ip"];
+    if (typeof realIp === "string" && realIp.length) {
+        return normalizeTrustedClientIp(realIp);
+    }
+    return normalizeTrustedClientIp(req.socket?.remoteAddress || "unknown");
 }
+
+export { normalizeTrustedClientIp };

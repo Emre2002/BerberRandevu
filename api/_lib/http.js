@@ -16,6 +16,23 @@ export function applyCors(req, res) {
     res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
 }
 
+export function buildRateLimitHeaders({ limit, remaining, retryAfterSeconds, resetAtSeconds } = {}) {
+    const headers = {};
+    if (Number.isFinite(limit)) {
+        headers["RateLimit-Limit"] = String(limit);
+    }
+    if (Number.isFinite(remaining)) {
+        headers["RateLimit-Remaining"] = String(Math.max(0, remaining));
+    }
+    if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0) {
+        headers["Retry-After"] = String(Math.ceil(retryAfterSeconds));
+    }
+    if (Number.isFinite(resetAtSeconds) && resetAtSeconds > 0) {
+        headers["RateLimit-Reset"] = String(Math.ceil(resetAtSeconds));
+    }
+    return headers;
+}
+
 export function sendJson(res, status, body, extraHeaders = {}) {
     res.statusCode = status;
     res.setHeader("Content-Type", "application/json; charset=utf-8");
@@ -23,6 +40,26 @@ export function sendJson(res, status, body, extraHeaders = {}) {
         res.setHeader(key, value);
     }
     res.end(JSON.stringify(body));
+}
+
+export function sendRateLimited(res, {
+    retryAfterSeconds = null,
+    limit = null,
+    remaining = 0,
+    resetAtSeconds = null
+} = {}) {
+    const headers = buildRateLimitHeaders({
+        limit,
+        remaining,
+        retryAfterSeconds,
+        resetAtSeconds
+    });
+    const body = {
+        ok: false,
+        code: "rate_limited",
+        retryAfterSeconds: Number.isFinite(retryAfterSeconds) ? retryAfterSeconds : null
+    };
+    sendJson(res, 429, body, headers);
 }
 
 export function sendError(res, status, code, message) {
