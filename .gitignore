@@ -1,4 +1,6 @@
 
+.local-private/
+
 functions/node_modules/
 
 .env

@@ -11,7 +11,8 @@
     "test:rules": "npm run test:rules:config && npm run test:rules:current && npm run test:rules:candidate",
     "deploy:appointment-fix": "bash scripts/deploy-appointment-fix.sh",
     "test:smoke:calendar": "node scripts/production-calendar-smoke.mjs",
-    "test:smoke:auth": "node scripts/production-auth-smoke.mjs"
+    "test:smoke:auth": "node scripts/production-auth-smoke.mjs",
+    "test:validation:scripts": "node --test tests/production-validation-scripts.test.mjs"
   },
   "dependencies": {
     "firebase-admin": "^12.7.0"
