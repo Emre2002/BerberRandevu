@@ -1,7 +1,8 @@
 import { collection, addDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-import { db, getCreateAppointmentCallable, shouldUseCallableBooking } from "./firebase-config.js";
+import { db } from "./firebase-config.js";
 import { upsertCustomerOnAppointment, normalizePhone } from "./customerService.js";
 import { notifyNewAppointment } from "./notificationService.js";
+import { submitPublicAppointment, PUBLIC_APPOINTMENT_ERROR_MESSAGES } from "./publicAppointmentClient.js";
 
 const INACTIVE_APPOINTMENT_STATUSES = new Set([
     "cancelled",
@@ -12,9 +13,34 @@ const INACTIVE_APPOINTMENT_STATUSES = new Set([
     "inactive"
 ]);
 
-/** Müşteri randevu varsayılan CF yolu aktif mi? */
+/** Müşteri randevu varsayılan sunucu API yolu aktif mi? */
+export function isServerApiBookingEnabled() {
+    return shouldUseServerApiBooking({ forceClient: false });
+}
+
+/** @deprecated use isServerApiBookingEnabled */
 export function isCfBookingEnabled() {
-    return shouldUseCallableBooking({ forceClient: false });
+    return isServerApiBookingEnabled();
+}
+
+/** Sunucu API yolu — production Vercel endpoint. */
+export function shouldUseServerApiBooking({ forceClient = false } = {}) {
+    if (forceClient) return false;
+    if (typeof window === "undefined") return true;
+    if (isForceClientBookingQuery()) return false;
+    return true;
+}
+
+function isForceClientBookingQuery() {
+    if (typeof window === "undefined") return false;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("forceClientBooking") === "1" || params.get("forceClientBooking") === "true") {
+        return true;
+    }
+    if (params.get("cfBooking") === "0" || params.get("cfBooking") === "false") {
+        return true;
+    }
+    return false;
 }
 
 /** CF başarısız olunca client fallback yapılmaması gereken iş/güvenlik kodları. */
@@ -69,6 +95,9 @@ export const CF_BOOKING_ERROR_MESSAGES = {
     ip_barber_rate_limited: "Kısa sürede çok fazla işlem yapıldı. Lütfen daha sonra tekrar deneyin.",
     ip_global_rate_limited: "Kısa sürede çok fazla işlem yapıldı. Lütfen daha sonra tekrar deneyin.",
     rate_limit_error: "Kısa sürede çok fazla işlem yapıldı. Lütfen daha sonra tekrar deneyin.",
+    rate_limited: "Kısa sürede çok fazla işlem yapıldı. Lütfen daha sonra tekrar deneyin.",
+    slot_unavailable: "Bu saat kısa süre önce doldu. Lütfen farklı bir saat seçin.",
+    business_not_found: "İşletme bulunamadı.",
     internal: "Randevu oluşturulamadı. Lütfen tekrar deneyin.",
     functions_unavailable: "Randevu servisi şu an kullanılamıyor. Lütfen daha sonra tekrar deneyin.",
     booking_failed: "Şu anda randevu oluşturulamadı. Lütfen tekrar deneyin."
@@ -142,6 +171,17 @@ function isTechnicalFallbackEligible(error) {
 }
 
 function toUserFacingError(error) {
+    const code = String(error?.code || "");
+    if (code && CF_BOOKING_ERROR_MESSAGES[code]) {
+        const mapped = new Error(CF_BOOKING_ERROR_MESSAGES[code]);
+        mapped.code = code;
+        return mapped;
+    }
+    if (code && PUBLIC_APPOINTMENT_ERROR_MESSAGES[code]) {
+        const mapped = new Error(PUBLIC_APPOINTMENT_ERROR_MESSAGES[code]);
+        mapped.code = code;
+        return mapped;
+    }
     if (error instanceof Error && error.message && !String(error.code || "").startsWith("functions/")) {
         return error;
     }
@@ -220,8 +260,8 @@ export async function createAppointmentViaClient({
     return ref.id;
 }
 
-/** Cloud Function createAppointment callable yolu. */
-export async function createAppointmentViaCallable({
+/** Sunucu API randevu yolu — Vercel Admin SDK endpoint. */
+export async function createAppointmentViaServerApi({
     barberId,
     barberSlug,
     customerName,
@@ -230,33 +270,20 @@ export async function createAppointmentViaCallable({
     date,
     time,
     musteriNotu = "",
-    website = ""
+    website = "",
+    idempotencyKey = ""
 }) {
-    const callable = await getCreateAppointmentCallable({ forceClient: false });
-    if (!callable) {
-        const err = new Error(CF_BOOKING_ERROR_MESSAGES.functions_unavailable);
-        err.code = "functions_unavailable";
-        throw err;
-    }
-
-    try {
-        const result = await callable({
-            barberSlug: barberSlug || barberId,
-            customerName,
-            phone,
-            service,
-            date,
-            time,
-            musteriNotu: musteriNotu || "",
-            website: website || ""
-        });
-        return result.data?.appointmentId || null;
-    } catch (error) {
-        if (isNonFallbackBookingError(error)) {
-            throw mapCallableBookingError(error);
-        }
-        throw error;
-    }
+    return submitPublicAppointment({
+        businessSlug: barberSlug || barberId,
+        customerName,
+        phone,
+        service,
+        date,
+        time,
+        musteriNotu,
+        website,
+        idempotencyKey
+    });
 }
 
 const clientPayloadKeys = [
@@ -280,14 +307,15 @@ function pickClientPayload(params) {
 
 /**
  * Randevu oluşturur; müşteri DB, bildirim ve Telegram yan etkilerini tetikler.
- * Varsayılan (Faz 5C-C4): Cloud Function. Rollback: ?cfBooking=0 veya ?forceClientBooking=1
- * Admin paneli: forceClient: true ile her zaman client yolu.
+ * Varsayılan: güvenli Vercel server API. Rollback: ?cfBooking=0 veya ?forceClientBooking=1
+ * Admin paneli: forceClient: true ile client yolu (emulator / legacy only).
  */
 export async function createAppointmentWithEffects(params) {
     const {
         forceClient = false,
         website = "",
         barberId,
+        idempotencyKey = "",
         ...rest
     } = params;
 
@@ -298,36 +326,24 @@ export async function createAppointmentWithEffects(params) {
         musteriNotu: params.musteriNotu ?? ""
     });
 
-    const callablePayload = {
+    const serverPayload = {
         barberId,
         barberSlug: barberId,
         ...rest,
         musteriNotu: params.musteriNotu ?? "",
-        website
+        website,
+        idempotencyKey
     };
 
-    const useCallable = shouldUseCallableBooking({ forceClient });
+    const useServerApi = shouldUseServerApiBooking({ forceClient });
 
-    if (!useCallable) {
+    if (!useServerApi) {
         return createAppointmentViaClient(clientPayload);
     }
 
     try {
-        return await createAppointmentViaCallable(callablePayload);
+        return await createAppointmentViaServerApi(serverPayload);
     } catch (error) {
-        if (!isTechnicalFallbackEligible(error)) {
-            throw toUserFacingError(error);
-        }
-
-        console.info("[Booking] CF unavailable, falling back to client path");
-
-        try {
-            return await createAppointmentViaClient(clientPayload);
-        } catch (clientError) {
-            console.warn("[Booking] Client fallback failed:", clientError?.message || clientError);
-            const failed = new Error(CF_BOOKING_ERROR_MESSAGES.booking_failed);
-            failed.code = "booking_failed";
-            throw failed;
-        }
+        throw toUserFacingError(error);
     }
 }

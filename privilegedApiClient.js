@@ -10,7 +10,7 @@ const API_ROUTE_MAP = {
     setOwnerAccountStatus: "/api/set-owner-status",
     getOwnerBusinessProfile: "/api/get-owner-profile",
     updateOwnerProfile: "/api/update-owner-profile",
-    createAppointment: "/api/create-appointment",
+    createAppointment: "/api/public/create-appointment",
     createOwnerAccount: "/api/create-owner-account"
 };
 

@@ -1,8 +1,8 @@
 import { getAdminDb } from "../_lib/firebase-admin.js";
 import { applyCors, readJsonBody, sendError, sendJson } from "../_lib/http.js";
-import { normalizeSlug } from "../_lib/normalize-slug.js";
 import { checkRateLimit, getClientIp } from "../_lib/rate-limit.js";
 import { hasActivePhoneAppointmentOnDay, validateAvailabilityDate } from "../_lib/availability.js";
+import { resolvePublicBusinessSlug } from "../_lib/resolve-public-business-slug.js";
 
 function normalizePhone(raw) {
     if (!raw) return "";
@@ -34,11 +34,11 @@ export default async function handler(req, res) {
 
     try {
         const body = await readJsonBody(req);
-        const businessSlug = normalizeSlug(body.businessId || body.dukkan || body.shop);
+        const rawSlug = body.businessId || body.dukkan || body.shop;
         const date = String(body.date || "").trim();
         const phoneNorm = normalizePhone(body.phone);
 
-        if (!businessSlug || !phoneNorm || phoneNorm.length !== 10) {
+        if (!String(rawSlug || "").trim() || !phoneNorm || phoneNorm.length !== 10) {
             sendError(res, 400, "invalid_request", "Invalid request.");
             return;
         }
@@ -50,6 +50,12 @@ export default async function handler(req, res) {
         }
 
         const db = getAdminDb();
+        const businessSlug = await resolvePublicBusinessSlug(db, rawSlug);
+        if (!businessSlug) {
+            sendError(res, 404, "shop_not_found", "Business not found.");
+            return;
+        }
+
         const publicSnap = await db.collection("publicBarbers").doc(businessSlug).get();
         if (!publicSnap.exists) {
             sendError(res, 404, "shop_not_found", "Business not found.");

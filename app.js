@@ -1192,7 +1192,10 @@ async function initCustomerPage() {
                     time: selectedSlot,
                     status: "confirmed",
                     musteriNotu,
-                    website: document.getElementById("bookingHoneypot")?.value?.trim() || ""
+                    website: document.getElementById("bookingHoneypot")?.value?.trim() || "",
+                    idempotencyKey: typeof crypto !== "undefined" && crypto.randomUUID
+                        ? crypto.randomUUID()
+                        : `${Date.now()}-${Math.random().toString(36).slice(2)}`
                 });
 
                 setPhoneCooldown(phone);

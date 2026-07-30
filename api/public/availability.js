@@ -1,8 +1,8 @@
 import { getAdminDb } from "../_lib/firebase-admin.js";
 import { applyCors, sendError, sendJson } from "../_lib/http.js";
-import { normalizeSlug } from "../_lib/normalize-slug.js";
 import { checkRateLimit, getClientIp } from "../_lib/rate-limit.js";
 import { computePublicAvailability, validateAvailabilityDate } from "../_lib/availability.js";
+import { resolvePublicBusinessSlug } from "../_lib/resolve-public-business-slug.js";
 
 export default async function handler(req, res) {
     applyCors(req, res);
@@ -31,10 +31,17 @@ export default async function handler(req, res) {
             || url.searchParams.get("businessId")
             || "";
         const date = String(url.searchParams.get("date") || "").trim();
-        const businessSlug = normalizeSlug(slugRaw);
+
+        if (!String(slugRaw).trim()) {
+            sendError(res, 400, "invalid_business", "Business identifier is required.");
+            return;
+        }
+
+        const db = getAdminDb();
+        const businessSlug = await resolvePublicBusinessSlug(db, slugRaw);
 
         if (!businessSlug) {
-            sendError(res, 400, "invalid_business", "Business identifier is required.");
+            sendError(res, 404, "shop_not_found", "Business not found.");
             return;
         }
 
@@ -44,7 +51,6 @@ export default async function handler(req, res) {
             return;
         }
 
-        const db = getAdminDb();
         const result = await computePublicAvailability(db, { businessSlug, date });
 
         if (!result.ok) {
