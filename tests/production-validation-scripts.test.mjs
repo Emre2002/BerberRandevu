@@ -94,6 +94,36 @@ describe("production validation credential security", () => {
         assert.match(src, /report\.accounts\.public/);
     });
 
+    it("validation script avoids SPA login waitForURL race and uses domcontentloaded", () => {
+        const src = read(VALIDATION_MJS);
+        assert.match(src, /performOwnerLogin/);
+        assert.match(src, /waitUntil:\s*"domcontentloaded"/);
+        assert.match(src, /requestSubmit\(\)/);
+        assert.match(src, /waitForSelector\("#adminPanel:not\(\[hidden\]\)"/);
+    });
+
+    it("validation script reports auth resolver and list-businesses HTTP statuses", () => {
+        const src = read(VALIDATION_MJS);
+        assert.match(src, /resolveStatus/);
+        assert.match(src, /listBusinessesStatus/);
+        assert.match(src, /auth_resolver_failed/);
+        assert.match(src, /list_businesses_status_/);
+    });
+
+    it("validation script accepts valid empty availability states", () => {
+        const src = read(VALIDATION_MJS);
+        assert.match(src, /valid_no_availability/);
+        assert.match(src, /closed_day/);
+        assert.doesNotMatch(src, /no_slots_loaded/);
+    });
+
+    it("validation script uses super-admin panel DOM instead of stale globals", () => {
+        const src = read(VALIDATION_MJS);
+        assert.match(src, /#saLoginScreen\[hidden\]/);
+        assert.match(src, /\.sad-shop-card/);
+        assert.doesNotMatch(src, /window\.[A-Za-z0-9_]+\s*&&/);
+    });
+
     it("credential files are not tracked in git index", () => {
         const paths = [
             resolve(ROOT, ".local-private/superadmin-credentials.txt"),
