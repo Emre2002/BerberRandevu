@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test:regression": "node --test tests/phase1-auth.test.mjs tests/dry-run.test.mjs tests/production-readonly-collector.test.mjs tests/auth-bootstrap.test.mjs tests/emulator-auth-signin.test.mjs tests/functions-emulator-export.test.mjs tests/username-normalization-parity.test.mjs tests/emulator-membership-e2e.test.mjs tests/emulator-auth-persistence.test.mjs tests/public-barber-projection.test.mjs tests/emulator-phase4b2-smoke.test.mjs tests/appointment-calendar-permissions.test.mjs tests/public-availability-api.test.mjs tests/public-create-appointment.test.mjs tests/super-admin-api.test.mjs tests/resolve-auth-api.test.mjs tests/calendar-owner-security.test.mjs",
+    "test:regression": "node --test tests/phase1-auth.test.mjs tests/dry-run.test.mjs tests/production-readonly-collector.test.mjs tests/auth-bootstrap.test.mjs tests/emulator-auth-signin.test.mjs tests/functions-emulator-export.test.mjs tests/username-normalization-parity.test.mjs tests/emulator-membership-e2e.test.mjs tests/emulator-auth-persistence.test.mjs tests/public-barber-projection.test.mjs tests/emulator-phase4b2-smoke.test.mjs tests/appointment-calendar-permissions.test.mjs tests/public-availability-api.test.mjs tests/public-create-appointment.test.mjs tests/production-booking-e2e.test.mjs tests/super-admin-api.test.mjs tests/resolve-auth-api.test.mjs",
     "test:rules:config": "node tests/firestore-rules/run.mjs config",
     "test:rules:current": "node tests/firestore-rules/run.mjs current",
     "test:rules:target": "node tests/firestore-rules/run.mjs target",
