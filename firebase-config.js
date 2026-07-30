@@ -21,7 +21,7 @@ function getBookingUrlParams() {
     return new URLSearchParams(window.location.search);
 }
 
-/** Eski client-side yol zorunlu mu? (?cfBooking=0 veya ?forceClientBooking=1) */
+/** Emulator-only rollback: ?forceClientBooking=1 veya ?cfBooking=0 */
 export function isForceClientBookingQuery() {
     const params = getBookingUrlParams();
     if (params.get("forceClientBooking") === "1" || params.get("forceClientBooking") === "true") {
@@ -33,54 +33,7 @@ export function isForceClientBookingQuery() {
     return false;
 }
 
-/**
- * Müşteri randevu yolu: varsayılan Cloud Function (Faz 5C-C4).
- * Admin paneli createAppointmentWithEffects({ forceClient: true }) ile client yolunu kullanır.
- */
-export function shouldUseCallableBooking({ forceClient = false } = {}) {
-    if (forceClient) return false;
-    if (typeof window === "undefined") return true;
-    if (isForceClientBookingQuery()) return false;
-    return true;
-}
-
-/** Geriye dönük uyumluluk — C4 sonrası varsayılan CF. */
-export function isCfBookingQueryEnabled() {
-    return shouldUseCallableBooking({ forceClient: false });
-}
-
-let createAppointmentCallablePromise = null;
 let resolveAuthIdentifierCallablePromise = null;
-
-/**
- * Callable createAppointment — lazy import.
- * @returns {Promise<import('firebase/functions').HttpsCallable|null>}
- */
-export async function getCreateAppointmentCallable({ forceClient = false } = {}) {
-    if (!shouldUseCallableBooking({ forceClient })) return null;
-
-    if (!createAppointmentCallablePromise) {
-        createAppointmentCallablePromise = (async () => {
-            const { getFunctions, httpsCallable, connectFunctionsEmulator } = await import(
-                "https://www.gstatic.com/firebasejs/10.7.1/firebase-functions.js"
-            );
-            const functions = getFunctions(app);
-            if (
-                typeof location !== "undefined" &&
-                (location.hostname === "localhost" || location.hostname === "127.0.0.1")
-            ) {
-                try {
-                    connectFunctionsEmulator(functions, "127.0.0.1", 5001);
-                } catch {
-                    /* emulator zaten bağlı */
-                }
-            }
-            return httpsCallable(functions, "createAppointment");
-        })();
-    }
-
-    return createAppointmentCallablePromise;
-}
 
 /**
  * Emulator-only username resolver callable — lazy import.

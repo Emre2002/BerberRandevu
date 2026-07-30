@@ -56,21 +56,21 @@ describe("functions/index.js — emulator-only export", () => {
     it("FUNCTIONS_EMULATOR tanımsızken resolveAuthIdentifierForEmulator export edilmez", () => {
         const exp = probeFunctionsExports(undefined);
         assert.equal(exp.resolveType, "undefined");
-        assert.equal(exp.createType, "function");
+        assert.equal(exp.createType, "undefined");
         assert.equal(exp.callableModuleLoaded, false);
     });
 
     it('FUNCTIONS_EMULATOR="false" iken export edilmez', () => {
         const exp = probeFunctionsExports("false");
         assert.equal(exp.resolveType, "undefined");
-        assert.equal(exp.createType, "function");
+        assert.equal(exp.createType, "undefined");
         assert.equal(exp.callableModuleLoaded, false);
     });
 
     it('FUNCTIONS_EMULATOR="true" iken handler modülü yüklenir ve export function olur', () => {
         const exp = probeFunctionsExports("true");
         assert.equal(exp.resolveType, "function");
-        assert.equal(exp.createType, "function");
+        assert.equal(exp.createType, "undefined");
         assert.equal(exp.callableModuleLoaded, true);
     });
 });

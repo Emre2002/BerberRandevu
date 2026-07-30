@@ -133,8 +133,9 @@ loginForm?.addEventListener("submit", async (e) => {
 });
 
 (async () => {
-    if (!isSuperAdminLoggedIn()) return;
     try {
+        const auth = await getAuthInstance();
+        if (!auth.currentUser) return;
         await ensureSuperAdminAuthSession();
         await showPanel();
     } catch {
