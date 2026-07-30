@@ -72,17 +72,45 @@ async function fetchAvailability(date, dukkan) {
     return { status: resp.status, body };
 }
 
-async function findOpenSlot(dukkan) {
+async function createOwnerTestAppointment({ token, businessId, service }) {
     for (let offset = 1; offset <= 14; offset += 1) {
         const d = new Date();
         d.setDate(d.getDate() + offset);
-        const date = d.toISOString().slice(0, 10);
-        const avail = await fetchAvailability(date, dukkan);
-        if (avail.status === 200 && avail.body?.availableSlots?.length) {
-            return { date, time: avail.body.availableSlots[0] };
+        const candidateDate = d.toISOString().slice(0, 10);
+        const avail = await fetchAvailability(candidateDate, businessId);
+        if (avail.status !== 200 || !avail.body?.availableSlots?.length) continue;
+
+        for (const candidateTime of avail.body.availableSlots) {
+            const createResp = await fetch(`${BASE}/api/owner/create-appointment`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Accept: "application/json",
+                    Authorization: `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    customerName: "Archive E2E Test",
+                    phone: `0555${String(Date.now()).slice(-7)}`,
+                    service,
+                    date: candidateDate,
+                    time: candidateTime,
+                    musteriNotu: "owner-archive-e2e",
+                    idempotencyKey: crypto.randomUUID()
+                })
+            });
+            const createBody = await createResp.json().catch(() => null);
+            if (createResp.status === 201 && createBody?.appointmentId) {
+                return {
+                    createStatus: createResp.status,
+                    appointmentId: createBody.appointmentId,
+                    date: candidateDate,
+                    time: candidateTime
+                };
+            }
         }
     }
-    throw new Error("availability_not_found");
+
+    throw new Error("create_unavailable");
 }
 
 const report = {
@@ -120,43 +148,18 @@ try {
 
     idToken = await signInOwner(resolved.authEmail, password);
 
-    const slot = await findOpenSlot(businessId);
-    date = slot.date;
-    time = slot.time;
-
     const db = getAdminDb();
     const publicSnap = await db.collection("publicBarbers").doc(businessId).get();
     const services = publicSnap.data()?.selectedServices;
     const service = Array.isArray(services) && services.length
         ? services[0]
         : "Saç Kesimi & Yıkama";
-    const idempotencyKey = crypto.randomUUID();
 
-    const createResp = await fetch(`${BASE}/api/owner/create-appointment`, {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-            Authorization: `Bearer ${idToken}`
-        },
-        body: JSON.stringify({
-            customerName: "Archive E2E Test",
-            phone: `0555${String(Date.now()).slice(-7)}`,
-            service,
-            date,
-            time,
-            musteriNotu: "owner-archive-e2e",
-            idempotencyKey
-        })
-    });
-
-    report.createStatus = createResp.status;
-    const createBody = await createResp.json().catch(() => null);
-    if (createResp.status !== 201 || !createBody?.appointmentId) {
-        throw new Error(`create_${createResp.status}`);
-    }
-
-    appointmentId = createBody.appointmentId;
+    const created = await createOwnerTestAppointment({ token: idToken, businessId, service });
+    report.createStatus = created.createStatus;
+    appointmentId = created.appointmentId;
+    date = created.date;
+    time = created.time;
     report.appointmentId = appointmentId;
     lockId = `${businessId}__${date}__${time}`;
 
