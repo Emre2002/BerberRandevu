@@ -96,5 +96,33 @@ export async function seedRulesTestData(testEnv) {
             date: "2099-01-15",
             time: "10:00"
         });
+
+        const archiveExpiry = new Date("2099-02-01T00:00:00Z");
+        await db.collection("deletedAppointments").doc("archive-rules-a1").set({
+            barberSlug: SHOP_A,
+            customerName: "Archived A",
+            customerPhone: "5551111111",
+            appointmentDate: "2099-01-10",
+            appointmentTime: "10:00",
+            serviceName: "Test",
+            originalAppointmentId: "appt-archived-a1",
+            deletedAt: new Date("2099-01-11T00:00:00Z"),
+            deleteExpireAt: archiveExpiry,
+            deletedBy: "seed",
+            deletedByMode: "rules-test"
+        });
+        await db.collection("deletedAppointments").doc("archive-rules-b1").set({
+            barberSlug: SHOP_B,
+            customerName: "Archived B",
+            customerPhone: "5552222222",
+            appointmentDate: "2099-01-10",
+            appointmentTime: "11:00",
+            serviceName: "Test",
+            originalAppointmentId: "appt-archived-b1",
+            deletedAt: new Date("2099-01-11T00:00:00Z"),
+            deleteExpireAt: archiveExpiry,
+            deletedBy: "seed",
+            deletedByMode: "rules-test"
+        });
     });
 }

@@ -155,11 +155,11 @@ service cloud.firestore {
     // --- Deleted appointments archive ---
 
     match /deletedAppointments/{archiveId} {
-      allow get, list: if hasActiveOwnerMembership()
+      allow get: if hasActiveOwnerMembership()
         && resource.data.barberSlug == ownerBusinessId();
-      allow create: if hasActiveOwnerMembership()
-        && request.resource.data.barberSlug == ownerBusinessId();
-      allow update, delete: if false;
+      allow list: if hasActiveOwnerMembership()
+        && resource.data.barberSlug == ownerBusinessId();
+      allow create, update, delete: if false;
     }
 
     // --- Public intake forms ---

@@ -14,7 +14,7 @@ import {
     UID_OWNER_B,
     UID_NO_MEMBERSHIP
 } from "./fixtures.mjs";
-import { doc, setDoc, updateDoc, deleteDoc, collection, getDocs, query, where } from "firebase/firestore";
+import { doc, setDoc, updateDoc, deleteDoc, collection, getDocs, query, where, addDoc } from "firebase/firestore";
 
 /** Production firestore.rules — güvenli membership tabanlı davranış karakterizasyonu. */
 
@@ -192,12 +192,104 @@ describe("current-rules-characterization", () => {
             const ctx = testEnv.authenticatedContext(UID_OWNER_A);
             await assertFails(ctx.firestore().doc("activationCodes/RULESTESTCODE").get());
         });
+
+        it("deletedAppointments tenant-scoped query ALLOW", async () => {
+            const ctx = testEnv.authenticatedContext(UID_OWNER_A);
+            const q = query(
+                collection(ctx.firestore(), "deletedAppointments"),
+                where("barberSlug", "==", SHOP_A)
+            );
+            await assertSucceeds(getDocs(q));
+        });
+
+        it("deletedAppointments own archive get ALLOW", async () => {
+            const ctx = testEnv.authenticatedContext(UID_OWNER_A);
+            await assertSucceeds(ctx.firestore().doc("deletedAppointments/archive-rules-a1").get());
+        });
+
+        it("deletedAppointments client create DENY", async () => {
+            const ctx = testEnv.authenticatedContext(UID_OWNER_A);
+            await assertFails(
+                setDoc(doc(ctx.firestore(), "deletedAppointments", "archive-rules-injected"), {
+                    barberSlug: SHOP_A,
+                    originalAppointmentId: "injected",
+                    customerName: "Injected"
+                })
+            );
+        });
+
+        it("deletedAppointments client update DENY", async () => {
+            const ctx = testEnv.authenticatedContext(UID_OWNER_A);
+            await assertFails(
+                updateDoc(doc(ctx.firestore(), "deletedAppointments", "archive-rules-a1"), {
+                    customerName: "Tampered"
+                })
+            );
+        });
+
+        it("deletedAppointments client delete DENY", async () => {
+            const ctx = testEnv.authenticatedContext(UID_OWNER_A);
+            await assertFails(deleteDoc(doc(ctx.firestore(), "deletedAppointments", "archive-rules-a1")));
+        });
+
+        it("deletedAppointments cross-tenant get DENY", async () => {
+            const ctx = testEnv.authenticatedContext(UID_OWNER_A);
+            await assertFails(ctx.firestore().doc("deletedAppointments/archive-rules-b1").get());
+        });
+
+        it("deletedAppointments cross-tenant query DENY", async () => {
+            const ctx = testEnv.authenticatedContext(UID_OWNER_A);
+            const q = query(
+                collection(ctx.firestore(), "deletedAppointments"),
+                where("barberSlug", "==", SHOP_B)
+            );
+            await assertFails(getDocs(q));
+        });
+
+        it("deletedAppointments unscoped list DENY", async () => {
+            const ctx = testEnv.authenticatedContext(UID_OWNER_A);
+            await assertFails(getDocs(collection(ctx.firestore(), "deletedAppointments")));
+        });
     });
 
     describe("owner B isolation", () => {
         it("owner B cannot read owner A appointment", async () => {
             const ctx = testEnv.authenticatedContext(UID_OWNER_B);
             await assertFails(ctx.firestore().doc("appointments/appt-rules-a1").get());
+        });
+
+        it("owner B cannot read owner A deletedAppointments archive", async () => {
+            const ctx = testEnv.authenticatedContext(UID_OWNER_B);
+            await assertFails(ctx.firestore().doc("deletedAppointments/archive-rules-a1").get());
+        });
+    });
+
+    describe("unauthenticated deletedAppointments", () => {
+        it("deletedAppointments create DENY", async () => {
+            const ctx = testEnv.unauthenticatedContext();
+            await assertFails(
+                setDoc(doc(ctx.firestore(), "deletedAppointments", "archive-rules-public"), {
+                    barberSlug: SHOP_A,
+                    originalAppointmentId: "injected"
+                })
+            );
+        });
+
+        it("deletedAppointments get DENY", async () => {
+            const ctx = testEnv.unauthenticatedContext();
+            await assertFails(ctx.firestore().doc("deletedAppointments/archive-rules-a1").get());
+        });
+    });
+
+    describe("authenticated without membership deletedAppointments", () => {
+        it("deletedAppointments create DENY", async () => {
+            const ctx = testEnv.authenticatedContext(UID_NO_MEMBERSHIP);
+            await assertFails(
+                addDoc(collection(ctx.firestore(), "deletedAppointments"), {
+                    barberSlug: SHOP_A,
+                    originalAppointmentId: "injected"
+                })
+            );
         });
     });
 });
