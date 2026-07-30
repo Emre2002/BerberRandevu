@@ -12,6 +12,7 @@ const API_ROUTE_MAP = {
     updateOwnerProfile: "/api/update-owner-profile",
     createAppointment: "/api/public/create-appointment",
     createOwnerAppointment: "/api/owner/create-appointment",
+    archiveOwnerAppointment: "/api/owner/archive-appointment",
     createOwnerAccount: "/api/create-owner-account"
 };
 
@@ -88,7 +89,7 @@ export async function callPrivilegedApi(routeKey, payload = {}, opts = { auth: t
 
     if (!response.ok) {
         const err = new Error(data?.message || data?.error || "privileged_api_failed");
-        err.code = data?.error || "privileged_api_failed";
+        err.code = data?.code || data?.error || "privileged_api_failed";
         err.status = response.status;
         throw err;
     }
@@ -118,4 +119,8 @@ export async function setOwnerAccountStatusViaApi(businessId, active) {
 
 export async function createOwnerAppointmentViaApi(payload) {
     return callPrivilegedApi("createOwnerAppointment", payload, { auth: true });
+}
+
+export async function archiveOwnerAppointmentViaApi(payload) {
+    return callPrivilegedApi("archiveOwnerAppointment", payload, { auth: true });
 }

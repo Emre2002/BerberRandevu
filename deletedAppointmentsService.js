@@ -1,11 +1,7 @@
 import {
     collection,
-    addDoc,
     getDocs,
-    deleteDoc,
     doc,
-    getDoc,
-    setDoc,
     query,
     where,
     orderBy,
@@ -13,80 +9,57 @@ import {
     Timestamp
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { db } from "./firebase-config.js";
+import { archiveOwnerAppointmentViaApi } from "./privilegedApiClient.js";
 
 const COLLECTION = "deletedAppointments";
 const ARCHIVE_DAYS = 7;
 const LIST_LIMIT = 100;
 
-function normalizeTimeKey(key) {
-    if (!key || key === "ALL") return null;
-    if (/^\d{2}:\d{2}$/.test(key)) return key;
-    const match = key.match(/^(\d{2}:\d{2})/);
-    return match ? match[1] : null;
-}
+export const ARCHIVE_ERROR_MESSAGES = {
+    invalid_request: "Randevu şu anda arşive alınamadı. Lütfen tekrar deneyin.",
+    auth_required: "Oturum doğrulanamadı. Lütfen tekrar giriş yapın.",
+    token_expired: "Oturum süresi doldu. Lütfen tekrar giriş yapın.",
+    auth_invalid: "Oturum doğrulanamadı. Lütfen tekrar giriş yapın.",
+    forbidden: "Bu randevu üzerinde işlem yapma yetkiniz bulunmuyor.",
+    appointment_not_found: "Randevu bulunamadı veya daha önce kaldırılmış.",
+    archive_conflict: "Randevu arşiv durumu doğrulanamadı. Sayfayı yenileyip tekrar deneyin.",
+    rate_limited: "Kısa sürede çok fazla işlem yapıldı. Lütfen daha sonra tekrar deneyin.",
+    internal_error: "Randevu şu anda arşive alınamadı. Lütfen tekrar deneyin.",
+    privileged_api_failed: "Randevu şu anda arşive alınamadı. Lütfen tekrar deneyin."
+};
 
-function buildDeleteExpireAt(deletedAt) {
-    const expire = deletedAt.toDate();
-    expire.setDate(expire.getDate() + ARCHIVE_DAYS);
-    return Timestamp.fromDate(expire);
-}
-
-async function deleteOriginalAppointment(barberSlug, appointment) {
-    if (appointment.legacy) {
-        const snap = await getDoc(doc(db, "berberler", barberSlug, "appointments", appointment.date));
-        if (snap.exists()) {
-            const data = { ...snap.data() };
-            Object.keys(data).forEach((key) => {
-                if (normalizeTimeKey(key) === appointment.time) delete data[key];
-            });
-            await setDoc(doc(db, "berberler", barberSlug, "appointments", appointment.date), data);
-        }
-        return;
-    }
-    if (appointment.id) {
-        await deleteDoc(doc(db, "appointments", appointment.id));
-    }
+function toArchiveUserError(error) {
+    const code = String(error?.code || "internal_error");
+    const message = ARCHIVE_ERROR_MESSAGES[code] || ARCHIVE_ERROR_MESSAGES.internal_error;
+    const mapped = new Error(message);
+    mapped.code = code;
+    return mapped;
 }
 
 /**
- * Önce arşive yazar, başarılı olursa orijinal randevuyu siler.
+ * Owner archive via authenticated server API only.
+ * Never writes archive docs or deletes active appointments from the browser.
  */
 export async function archiveAndDeleteAppointment({
-    barberSlug,
     appointment,
     deletedBy = "barberAdmin",
-    deletedByMode = "adminPanel"
+    deletedByMode = "adminPanel",
+    archiveReason = ""
 }) {
-    const deletedAt = Timestamp.now();
-    const deleteExpireAt = buildDeleteExpireAt(deletedAt);
-
-    const archiveDoc = {
-        barberSlug,
-        customerName: appointment.customerName || "",
-        customerPhone: appointment.phone || "",
-        appointmentDate: appointment.date || "",
-        appointmentTime: appointment.time || "",
-        serviceName: appointment.service || "",
-        note: appointment.musteriNotu || "",
-        originalAppointmentId: appointment.id || `legacy-${appointment.date}-${appointment.time}`,
-        deletedAt,
-        deleteExpireAt,
-        deletedBy,
-        deletedByMode
-    };
-
-    try {
-        await addDoc(collection(db, COLLECTION), archiveDoc);
-    } catch (err) {
-        console.error("Arşive yazma hatası:", err);
-        throw new Error("Randevu arşive taşınamadığı için silme işlemi iptal edildi.");
+    const appointmentId = appointment?.id || `legacy-${appointment?.date}-${appointment?.time}`;
+    if (!appointmentId || appointmentId === "legacy-undefined-undefined") {
+        throw toArchiveUserError({ code: "invalid_request" });
     }
 
     try {
-        await deleteOriginalAppointment(barberSlug, appointment);
+        return await archiveOwnerAppointmentViaApi({
+            appointmentId,
+            deletedBy,
+            deletedByMode,
+            archiveReason
+        });
     } catch (err) {
-        console.error("Orijinal randevu silme hatası:", err);
-        throw new Error("Randevu arşive alındı ancak takvimden kaldırılamadı. Lütfen sayfayı yenileyin.");
+        throw toArchiveUserError(err);
     }
 }
 

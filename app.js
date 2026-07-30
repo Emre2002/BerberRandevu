@@ -1389,17 +1389,24 @@ function initAdminPage() {
         if (confirmBtn) confirmBtn.disabled = true;
 
         try {
-            await archiveAndDeleteAppointment({
-                barberSlug: aktifDukkan,
+            const result = await archiveAndDeleteAppointment({
                 appointment: appt,
                 deletedBy: getDeletedByUser(),
                 deletedByMode: "adminPanel"
             });
             closeDeleteConfirmModal();
             closeModal();
-            showToast("Randevu silindi ve 7 gün boyunca arşive taşındı.");
-            await refreshDay(date || appt.date);
-            await deletedPanel.refresh();
+            const successMessage = result?.idempotent || result?.reconciled
+                ? "Randevu daha önce arşive alınmış."
+                : "Randevu arşive alındı.";
+            showToast(successMessage);
+            try {
+                await refreshDay(date || appt.date);
+                await deletedPanel.refresh();
+            } catch (refreshErr) {
+                console.warn("Takvim yenileme hatası:", refreshErr);
+                showToast("Randevu arşive alındı. Takvim yenilenemedi; sayfayı yenileyin.", "error");
+            }
         } catch (err) {
             showToast(err.message || firestoreErrorMessage(err), "error");
         } finally {
