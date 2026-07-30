@@ -8,6 +8,7 @@ import { readFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getAdminDb } from "../api/_lib/firebase-admin.js";
+import { buildDeterministicArchiveId } from "../api/_lib/archive-appointment-core.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, "..");
@@ -32,12 +33,6 @@ function loadOwnerPassword(username) {
         if (cols[1] === username && cols[2]) return cols[2];
     }
     return null;
-}
-
-function addDaysYmd(offset) {
-    const d = new Date();
-    d.setDate(d.getDate() + offset);
-    return d.toISOString().slice(0, 10);
 }
 
 async function resolveOwnerAuthEmail(username) {
@@ -95,8 +90,12 @@ const report = {
     stage: "owner_archive_e2e",
     createStatus: null,
     archiveStatus: null,
+    duplicateArchiveStatus: null,
+    crossTenantArchiveStatus: null,
     sourceRemoved: false,
     archiveVerified: false,
+    archiveCount: 0,
+    slotLockRemoved: false,
     cleanedUp: false,
     businessId: null,
     appointmentId: null,
@@ -159,6 +158,27 @@ try {
     report.appointmentId = appointmentId;
     lockId = `${businessId}__${date}__${time}`;
 
+    const otherOwner = ownerUsername === "bedirhan" ? "altinmakas" : "bedirhan";
+    const otherPassword = loadOwnerPassword(otherOwner);
+    if (otherPassword) {
+        const otherResolved = await resolveOwnerAuthEmail(otherOwner);
+        const otherToken = await signInOwner(otherResolved.authEmail, otherPassword);
+        const crossTenantResp = await fetch(`${BASE}/api/owner/archive-appointment`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Accept: "application/json",
+                Authorization: `Bearer ${otherToken}`
+            },
+            body: JSON.stringify({
+                appointmentId,
+                deletedBy: otherOwner,
+                deletedByMode: "e2e-test-cross-tenant"
+            })
+        });
+        report.crossTenantArchiveStatus = crossTenantResp.status;
+    }
+
     const archiveResp = await fetch(`${BASE}/api/owner/archive-appointment`, {
         method: "POST",
         headers: {
@@ -182,6 +202,21 @@ try {
     archiveId = archiveBody.archiveId || null;
     report.archiveId = archiveId;
 
+    const duplicateArchiveResp = await fetch(`${BASE}/api/owner/archive-appointment`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+            Authorization: `Bearer ${idToken}`
+        },
+        body: JSON.stringify({
+            appointmentId,
+            deletedBy: ownerUsername,
+            deletedByMode: "e2e-test-duplicate"
+        })
+    });
+    report.duplicateArchiveStatus = duplicateArchiveResp.status;
+
     const sourceSnap = await db.collection("appointments").doc(appointmentId).get();
     report.sourceRemoved = !sourceSnap.exists;
 
@@ -189,11 +224,27 @@ try {
         .collection("deletedAppointments")
         .where("barberSlug", "==", businessId)
         .where("originalAppointmentId", "==", appointmentId)
-        .limit(1)
+        .limit(5)
         .get();
-    report.archiveVerified = !archiveQuery.empty;
+    report.archiveCount = archiveQuery.size;
+    report.archiveVerified = archiveQuery.size === 1;
 
-    report.ok = report.sourceRemoved && report.archiveVerified;
+    const lockSnap = await db.collection("appointmentSlotLocks").doc(lockId).get();
+    report.slotLockRemoved = !lockSnap.exists;
+
+    const expectedArchiveId = buildDeterministicArchiveId(businessId, appointmentId);
+    if (archiveId && archiveId !== expectedArchiveId) {
+        report.archiveIdMatchesDeterministic = false;
+    } else {
+        report.archiveIdMatchesDeterministic = true;
+    }
+
+    report.ok = report.sourceRemoved
+        && report.archiveVerified
+        && report.archiveCount === 1
+        && report.slotLockRemoved
+        && report.duplicateArchiveStatus === 200
+        && (report.crossTenantArchiveStatus == null || report.crossTenantArchiveStatus === 403);
 } catch (err) {
     report.failureReason = String(err?.message || "internal_error").slice(0, 64);
 } finally {
@@ -209,16 +260,24 @@ try {
 
         if (archiveId) {
             await db.collection("deletedAppointments").doc(archiveId).delete().catch(() => {});
-        } else if (appointmentId && businessId) {
+        }
+        if (appointmentId && businessId) {
             const q = await db
                 .collection("deletedAppointments")
                 .where("barberSlug", "==", businessId)
                 .where("originalAppointmentId", "==", appointmentId)
-                .limit(3)
+                .limit(5)
                 .get();
             for (const docSnap of q.docs) {
                 await docSnap.ref.delete().catch(() => {});
             }
+            const remaining = await db
+                .collection("deletedAppointments")
+                .where("barberSlug", "==", businessId)
+                .where("originalAppointmentId", "==", appointmentId)
+                .limit(1)
+                .get();
+            if (!remaining.empty) cleaned = false;
         }
 
         if (lockId) {

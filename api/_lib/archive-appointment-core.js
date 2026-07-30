@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { Timestamp } from "firebase-admin/firestore";
 
 const ARCHIVE_COLLECTION = "deletedAppointments";
@@ -24,6 +25,19 @@ export function parseLegacyAppointmentId(appointmentId) {
     const match = /^legacy-(\d{4}-\d{2}-\d{2})-(\d{2}:\d{2})$/.exec(String(appointmentId || "").trim());
     if (!match) return null;
     return { date: match[1], time: match[2] };
+}
+
+/**
+ * Server-derived archive document ID for idempotent concurrent archive requests.
+ * @param {string} businessId
+ * @param {string} appointmentId
+ */
+export function buildDeterministicArchiveId(businessId, appointmentId) {
+    return crypto
+        .createHash("sha256")
+        .update(`deletedAppointment:${String(businessId).trim()}:${String(appointmentId).trim()}`)
+        .digest("hex")
+        .slice(0, 40);
 }
 
 function buildArchivePayload({
@@ -77,6 +91,15 @@ function assertArchiveTenantMatch(existingArchives, businessId) {
     }
 }
 
+function resolveArchiveDocId(businessId, appointmentId, existingArchives) {
+    const deterministicArchiveId = buildDeterministicArchiveId(businessId, appointmentId);
+    const legacyAutoArchive = existingArchives.find((doc) => doc.id !== deterministicArchiveId) || null;
+    return {
+        deterministicArchiveId,
+        archiveDocId: legacyAutoArchive?.id || deterministicArchiveId
+    };
+}
+
 async function releaseSlotLock(tx, lockRef, appointmentId) {
     if (!lockRef) return;
     const lockSnap = await tx.get(lockRef);
@@ -84,6 +107,17 @@ async function releaseSlotLock(tx, lockRef, appointmentId) {
     if (lockSnap.data()?.appointmentId === appointmentId) {
         tx.delete(lockRef);
     }
+}
+
+function buildArchiveSuccess(appointmentId, archiveId, { idempotent = false, reconciled = false } = {}) {
+    return {
+        ok: true,
+        appointmentId,
+        state: "archived",
+        archiveId,
+        ...(idempotent ? { idempotent: true } : {}),
+        ...(reconciled ? { reconciled: true } : {})
+    };
 }
 
 async function archiveLegacyAppointment(db, input) {
@@ -98,129 +132,101 @@ async function archiveLegacyAppointment(db, input) {
         existingArchives
     } = input;
 
-    const legacyRef = db.collection("berberler").doc(businessId).collection("appointments").doc(legacy.date);
-    const legacySnap = await legacyRef.get();
-
-    if (!legacySnap.exists) {
-        if (existingArchives.length > 0) {
-            return {
-                ok: true,
-                appointmentId,
-                state: "archived",
-                idempotent: true,
-                archiveId: existingArchives[0].id
-            };
-        }
-        const err = new Error("appointment_not_found");
-        err.code = "appointment_not_found";
-        throw err;
-    }
-
-    const legacyData = legacySnap.data() || {};
-    let customerName = "";
-    let slotPresent = false;
-
-    for (const [key, value] of Object.entries(legacyData)) {
-        if (normalizeTimeKey(key) !== legacy.time) continue;
-        slotPresent = true;
-        if (typeof value === "string" && value.trim()) {
-            customerName = value.trim();
-        }
-        break;
-    }
-
-    if (!slotPresent) {
-        if (existingArchives.length > 0) {
-            return {
-                ok: true,
-                appointmentId,
-                state: "archived",
-                idempotent: true,
-                archiveId: existingArchives[0].id
-            };
-        }
-        const err = new Error("appointment_not_found");
-        err.code = "appointment_not_found";
-        throw err;
-    }
-
-    if (existingArchives.length > 0) {
-        await db.runTransaction(async (tx) => {
-            const freshSnap = await tx.get(legacyRef);
-            if (!freshSnap.exists) return;
-
-            const data = { ...freshSnap.data() };
-            let changed = false;
-            for (const key of Object.keys(data)) {
-                if (normalizeTimeKey(key) === legacy.time) {
-                    delete data[key];
-                    changed = true;
-                }
-            }
-            if (changed) {
-                tx.set(legacyRef, data);
-            }
-        });
-
-        return {
-            ok: true,
-            appointmentId,
-            state: "archived",
-            reconciled: true,
-            archiveId: existingArchives[0].id
-        };
-    }
-
-    const archiveRef = db.collection(ARCHIVE_COLLECTION).doc();
-    const archivePayload = buildArchivePayload({
-        appointment: {
-            customerName,
-            phone: "—",
-            service: "—",
-            date: legacy.date,
-            time: legacy.time
-        },
+    const { deterministicArchiveId, archiveDocId } = resolveArchiveDocId(
         businessId,
         appointmentId,
-        archivedByUid,
-        deletedBy,
-        deletedByMode,
-        archiveReason
-    });
+        existingArchives
+    );
+    const archiveRef = db.collection(ARCHIVE_COLLECTION).doc(archiveDocId);
+    const legacyRef = db.collection("berberler").doc(businessId).collection("appointments").doc(legacy.date);
 
-    await db.runTransaction(async (tx) => {
-        const freshSnap = await tx.get(legacyRef);
-        if (!freshSnap.exists) {
+    return db.runTransaction(async (tx) => {
+        const archiveSnap = await tx.get(archiveRef);
+        const legacySnap = await tx.get(legacyRef);
+
+        if (archiveSnap.exists) {
+            if (archiveSnap.data()?.barberSlug !== businessId) {
+                const err = new Error("archive_conflict");
+                err.code = "archive_conflict";
+                throw err;
+            }
+
+            let reconciled = false;
+            if (legacySnap.exists) {
+                const data = { ...legacySnap.data() };
+                let changed = false;
+                for (const key of Object.keys(data)) {
+                    if (normalizeTimeKey(key) === legacy.time) {
+                        delete data[key];
+                        changed = true;
+                    }
+                }
+                if (changed) {
+                    tx.set(legacyRef, data);
+                    reconciled = true;
+                }
+            }
+
+            return buildArchiveSuccess(appointmentId, archiveDocId, {
+                idempotent: !reconciled,
+                reconciled
+            });
+        }
+
+        if (!legacySnap.exists) {
             const err = new Error("appointment_not_found");
             err.code = "appointment_not_found";
             throw err;
         }
 
-        const data = { ...freshSnap.data() };
-        let slotStillPresent = false;
+        const legacyData = legacySnap.data() || {};
+        let customerName = "";
+        let slotPresent = false;
+
+        for (const [key, value] of Object.entries(legacyData)) {
+            if (normalizeTimeKey(key) !== legacy.time) continue;
+            slotPresent = true;
+            if (typeof value === "string" && value.trim()) {
+                customerName = value.trim();
+            }
+            break;
+        }
+
+        if (!slotPresent) {
+            const err = new Error("appointment_not_found");
+            err.code = "appointment_not_found";
+            throw err;
+        }
+
+        const writeRef = db.collection(ARCHIVE_COLLECTION).doc(deterministicArchiveId);
+        const archivePayload = buildArchivePayload({
+            appointment: {
+                customerName,
+                phone: "—",
+                service: "—",
+                date: legacy.date,
+                time: legacy.time
+            },
+            businessId,
+            appointmentId,
+            archivedByUid,
+            deletedBy,
+            deletedByMode,
+            archiveReason
+        });
+
+        const data = { ...legacyData };
         for (const key of Object.keys(data)) {
             if (normalizeTimeKey(key) === legacy.time) {
-                slotStillPresent = true;
                 delete data[key];
             }
         }
 
-        if (!slotStillPresent) {
-            const err = new Error("appointment_not_found");
-            err.code = "appointment_not_found";
-            throw err;
-        }
-
-        tx.set(archiveRef, archivePayload);
+        tx.set(writeRef, archivePayload);
         tx.set(legacyRef, data);
-    });
 
-    return {
-        ok: true,
-        appointmentId,
-        state: "archived",
-        archiveId: archiveRef.id
-    };
+        return buildArchiveSuccess(appointmentId, deterministicArchiveId);
+    });
 }
 
 /**
@@ -256,98 +262,87 @@ export async function archiveOwnerAppointment(db, input) {
         });
     }
 
+    const { deterministicArchiveId, archiveDocId } = resolveArchiveDocId(
+        businessId,
+        appointmentId,
+        existingArchives
+    );
+    const archiveRef = db.collection(ARCHIVE_COLLECTION).doc(archiveDocId);
     const appointmentRef = db.collection("appointments").doc(appointmentId);
-    const appointmentSnap = await appointmentRef.get();
 
-    if (!appointmentSnap.exists) {
-        if (existingArchives.length > 0) {
-            return {
-                ok: true,
-                appointmentId,
-                state: "archived",
-                idempotent: true,
-                archiveId: existingArchives[0].id
-            };
-        }
-        const err = new Error("appointment_not_found");
-        err.code = "appointment_not_found";
-        throw err;
-    }
+    return db.runTransaction(async (tx) => {
+        const archiveSnap = await tx.get(archiveRef);
+        const appointmentSnap = await tx.get(appointmentRef);
 
-    const appointment = appointmentSnap.data() || {};
-    if (appointment.barberId !== businessId) {
-        const err = new Error("forbidden");
-        err.code = "forbidden";
-        throw err;
-    }
+        if (archiveSnap.exists) {
+            if (archiveSnap.data()?.barberSlug !== businessId) {
+                const err = new Error("archive_conflict");
+                err.code = "archive_conflict";
+                throw err;
+            }
 
-    const date = String(appointment.date || "").trim();
-    const time = String(appointment.time || "").trim();
-    const lockRef = date && time
-        ? db.collection("appointmentSlotLocks").doc(slotLockId(businessId, date, time))
-        : null;
-
-    if (existingArchives.length > 0) {
-        await db.runTransaction(async (tx) => {
-            const freshSnap = await tx.get(appointmentRef);
-            if (freshSnap.exists) {
-                const fresh = freshSnap.data() || {};
-                if (fresh.barberId !== businessId) {
+            let reconciled = false;
+            if (appointmentSnap.exists) {
+                const appointment = appointmentSnap.data() || {};
+                if (appointment.barberId !== businessId) {
                     const err = new Error("forbidden");
                     err.code = "forbidden";
                     throw err;
                 }
+
+                const date = String(appointment.date || "").trim();
+                const time = String(appointment.time || "").trim();
+                const lockRef = date && time
+                    ? db.collection("appointmentSlotLocks").doc(slotLockId(businessId, date, time))
+                    : null;
+
                 tx.delete(appointmentRef);
                 await releaseSlotLock(tx, lockRef, appointmentId);
+                reconciled = true;
             }
-        });
 
-        return {
-            ok: true,
-            appointmentId,
-            state: "archived",
-            reconciled: true,
-            archiveId: existingArchives[0].id
-        };
-    }
+            return buildArchiveSuccess(appointmentId, archiveDocId, {
+                idempotent: !reconciled,
+                reconciled
+            });
+        }
 
-    const archiveRef = db.collection(ARCHIVE_COLLECTION).doc();
-    const archivePayload = buildArchivePayload({
-        appointment,
-        businessId,
-        appointmentId,
-        archivedByUid,
-        deletedBy: input.deletedBy,
-        deletedByMode: input.deletedByMode,
-        archiveReason: input.archiveReason
-    });
-
-    await db.runTransaction(async (tx) => {
-        const freshSnap = await tx.get(appointmentRef);
-        if (!freshSnap.exists) {
+        if (!appointmentSnap.exists) {
             const err = new Error("appointment_not_found");
             err.code = "appointment_not_found";
             throw err;
         }
 
-        const fresh = freshSnap.data() || {};
-        if (fresh.barberId !== businessId) {
+        const appointment = appointmentSnap.data() || {};
+        if (appointment.barberId !== businessId) {
             const err = new Error("forbidden");
             err.code = "forbidden";
             throw err;
         }
 
-        tx.set(archiveRef, archivePayload);
+        const date = String(appointment.date || "").trim();
+        const time = String(appointment.time || "").trim();
+        const lockRef = date && time
+            ? db.collection("appointmentSlotLocks").doc(slotLockId(businessId, date, time))
+            : null;
+
+        const writeRef = db.collection(ARCHIVE_COLLECTION).doc(deterministicArchiveId);
+        const archivePayload = buildArchivePayload({
+            appointment,
+            businessId,
+            appointmentId,
+            archivedByUid,
+            deletedBy: input.deletedBy,
+            deletedByMode: input.deletedByMode,
+            archiveReason: input.archiveReason
+        });
+
+        tx.set(writeRef, archivePayload);
         tx.delete(appointmentRef);
         await releaseSlotLock(tx, lockRef, appointmentId);
-    });
 
-    return {
-        ok: true,
-        appointmentId,
-        state: "archived",
-        archiveId: archiveRef.id
-    };
+        return buildArchiveSuccess(appointmentId, deterministicArchiveId);
+    });
 }
 
 export function mapArchiveErrorToHttp(err) {

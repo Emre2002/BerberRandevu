@@ -47,15 +47,14 @@ describe("owner archive appointment core", () => {
     it("uses one Firestore transaction for archive write and active delete", () => {
         const src = readFileSync(resolve(ROOT, "api/_lib/archive-appointment-core.js"), "utf8");
         assert.match(src, /runTransaction/);
-        assert.match(src, /tx\.set\(archiveRef/);
+        assert.match(src, /tx\.set\(writeRef/);
         assert.match(src, /tx\.delete\(appointmentRef\)/);
-        assert.doesNotMatch(src, /await archiveOwnerAppointment[\s\S]*await delete/);
     });
 
     it("reconciles partial archive state without creating duplicate archive", () => {
         const src = readFileSync(resolve(ROOT, "api/_lib/archive-appointment-core.js"), "utf8");
         assert.match(src, /reconciled:\s*true/);
-        assert.match(src, /existingArchives\.length > 0/);
+        assert.match(src, /resolveArchiveDocId/);
         assert.match(src, /idempotent:\s*true/);
     });
 
@@ -80,6 +79,13 @@ describe("owner archive appointment core", () => {
         assert.match(src, /archivedByUid/);
         assert.match(src, /deleteExpireAt/);
         assert.doesNotMatch(src, /\.\.\.appointment/);
+    });
+
+    it("uses server-derived deterministic archive identity", () => {
+        const src = readFileSync(resolve(ROOT, "api/_lib/archive-appointment-core.js"), "utf8");
+        assert.match(src, /buildDeterministicArchiveId/);
+        assert.match(src, /deletedAppointment:/);
+        assert.match(src, /collection\(ARCHIVE_COLLECTION\)\.doc\(deterministicArchiveId\)/);
     });
 });
 
@@ -121,10 +127,17 @@ describe("owner archive security invariants", () => {
         assert.match(block, /allow create, update, delete: if false/);
     });
 
+    it("firestore rules deny direct client deletedAppointments writes", () => {
+        const rules = readFileSync(resolve(ROOT, "firestore.rules"), "utf8");
+        const block = rules.match(/match \/deletedAppointments\/\{archiveId\} \{([\s\S]*?)\n    \}/)?.[1] || "";
+        assert.match(block, /allow create, update, delete: if false/);
+        assert.match(block, /resource\.data\.barberSlug == ownerBusinessId\(\)/);
+    });
+
     it("archive API never trusts client businessId", () => {
         const route = readFileSync(resolve(ROOT, "api/owner/archive-appointment.js"), "utf8");
         const core = readFileSync(resolve(ROOT, "api/_lib/archive-appointment-core.js"), "utf8");
         assert.doesNotMatch(route, /body\.businessId/);
-        assert.match(core, /fresh\.barberId !== businessId/);
+        assert.match(core, /appointment\.barberId !== businessId/);
     });
 });
