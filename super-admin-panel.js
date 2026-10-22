@@ -20,6 +20,8 @@ import {
 import { fetchAllCustomers, toDateSafe } from "./customerService.js";
 import { saveFirebaseConfig, hasFirebaseConfig } from "./firebase-config.js";
 import { isSuperAdminLoggedIn } from "./sessionAuth.js";
+import { shouldUseEmulatorAuthLogin } from "./legacyAuthCompat.js";
+import { bindPasswordChangeForm } from "./passwordChangeUI.js";
 
 /** Super Admin → dükkan paneli: aynı origin (localStorage oturumu paylaşılır). */
 function buildSuperAdminAdminPanelUrl(slug) {
@@ -297,6 +299,16 @@ function getPanelHtml() {
                     <button type="button" class="sa-logout" id="saLogoutBtn">Çıkış Yap</button>
                 </div>
             </header>
+            ${shouldUseEmulatorAuthLogin() ? "" : `<details class="sa-card" style="margin-bottom:20px;max-width:480px;">
+                <summary>Hesap şifresini değiştir</summary>
+                <form id="superAdminPasswordChangeForm" autocomplete="off" style="padding-top:12px;">
+                    <div class="sa-form-group"><label for="saCurrentPassword">Mevcut Şifre</label><input id="saCurrentPassword" name="currentPassword" type="password" required autocomplete="current-password"></div>
+                    <div class="sa-form-group"><label for="saNewPassword">Yeni Şifre</label><input id="saNewPassword" name="newPassword" type="password" required minlength="8" autocomplete="new-password"></div>
+                    <div class="sa-form-group"><label for="saConfirmPassword">Yeni Şifre (Tekrar)</label><input id="saConfirmPassword" name="confirmPassword" type="password" required minlength="8" autocomplete="new-password"></div>
+                    <p data-password-status role="status" aria-live="polite"></p>
+                    <button type="submit" class="sa-btn sa-btn--primary">Şifreyi Değiştir</button>
+                </form>
+            </details>`}
             ${firebaseSetup}
             <div class="sa-stats sa-stats--dash" id="saStatCards" style="margin-bottom:24px;"></div>
             <div id="saAlertZone" style="margin-bottom:24px;"></div>
@@ -420,7 +432,7 @@ function getPanelHtml() {
                         <div class="sa-form-group"><label for="fieldOpenHour">Açılış Saati</label><input type="time" id="fieldOpenHour" value="09:00" required></div>
                         <div class="sa-form-group"><label for="fieldCloseHour">Kapanış Saati</label><input type="time" id="fieldCloseHour" value="21:00" required></div>
                         <div class="sa-form-group"><label for="fieldUsername">Kullanıcı Adı</label><input type="text" id="fieldUsername" required placeholder="elite_admin"></div>
-                        <div class="sa-form-group"><label for="fieldPassword">Şifre</label><input type="password" id="fieldPassword" required placeholder="••••••" minlength="4" autocomplete="new-password"></div>
+                        <div class="sa-form-group"><label for="fieldPassword">Şifre</label><input type="password" id="fieldPassword" required placeholder="••••••" minlength="6" autocomplete="new-password"></div>
                         <div class="sa-form-group"><label for="fieldTelegram">Telegram Chat ID</label><input type="text" id="fieldTelegram" placeholder="123456789"></div>
                         <div class="sa-form-group"><label for="fieldLogoUrl">Logo URL</label><input type="url" id="fieldLogoUrl" placeholder="https://..."></div>
                         <div class="sa-form-group"><label for="fieldCoverUrl">Kapak URL</label><input type="url" id="fieldCoverUrl" placeholder="https://..."></div>
@@ -467,7 +479,6 @@ function getPanelHtml() {
                         <div class="sa-form-group"><label>Açılış</label><input type="time" id="editOpenHour" required></div>
                         <div class="sa-form-group"><label>Kapanış</label><input type="time" id="editCloseHour" required></div>
                         <div class="sa-form-group"><label>Kullanıcı Adı</label><input type="text" id="editUsername" required></div>
-                        <div class="sa-form-group"><label>Şifre</label><input type="password" id="editPassword" required autocomplete="new-password"></div>
                         <div class="sa-form-group"><label>Telegram Chat ID</label><input type="text" id="editTelegram"></div>
                         <div class="sa-form-group"><label>Logo URL</label><input type="url" id="editLogoUrl"></div>
                         <div class="sa-form-group"><label>Kapak URL</label><input type="url" id="editCoverUrl"></div>
@@ -989,7 +1000,7 @@ function openEditModal(barber) {
     document.getElementById("editOpenHour").value = barber.openHour || "09:00";
     document.getElementById("editCloseHour").value = barber.closeHour || "21:00";
     document.getElementById("editUsername").value = barber.username || "";
-    document.getElementById("editPassword").value = barber.password || "";
+    document.getElementById("editUsername").disabled = Boolean(barber.ownerUid);
     document.getElementById("editTelegram").value = barber.telegramChatId || "";
     document.getElementById("editLogoUrl").value = barber.logoUrl || "";
     document.getElementById("editCoverUrl").value = barber.coverUrl || "";
@@ -1293,11 +1304,15 @@ function bindPanelEvents(onLogout) {
             createAddress?.reset();
             closeCreateBarberModal();
             showToastFn("Berber başarıyla oluşturuldu.");
-            // Tüm listeyi tekrar çekmek yerine yalnızca yeni kaydı oku ve cache'e ekle.
-            const newBarber = await fetchBarber(created.slug);
-            if (newBarber) {
-                barbersCache.push(newBarber);
-                sortBarbersCache();
+            // Liste okuması başarısız olsa bile tamamlanan oluşturma işlemini hata sayma.
+            try {
+                const newBarber = await fetchBarber(created.slug);
+                if (newBarber) {
+                    barbersCache.push(newBarber);
+                    sortBarbersCache();
+                }
+            } catch {
+                showToastFn("İşletme oluşturuldu; listeyi yenileyin.");
             }
             refreshBarberStatsUI();
         } catch (err) {
@@ -1368,8 +1383,6 @@ function bindPanelEvents(onLogout) {
                 whatsapp: document.getElementById("editWhatsapp").value,
                 openHour: document.getElementById("editOpenHour").value,
                 closeHour: document.getElementById("editCloseHour").value,
-                username: document.getElementById("editUsername").value,
-                password: document.getElementById("editPassword").value,
                 telegramChatId: document.getElementById("editTelegram").value,
                 logoUrl: document.getElementById("editLogoUrl").value,
                 coverUrl: document.getElementById("editCoverUrl").value,
@@ -1379,6 +1392,9 @@ function bindPanelEvents(onLogout) {
                 subscriptionStatus,
                 lastSubscriptionUpdate: serverTimestamp()
             };
+            if (!document.getElementById("editUsername").disabled) {
+                updates.username = document.getElementById("editUsername").value;
+            }
             await superAdminUpdateBarber(slug, updates);
             const cached = barbersCache.find(b => b.slug === slug);
             if (cached) {
@@ -1479,6 +1495,7 @@ export async function mountSuperAdminPanel(mountEl, { showToast, onLogout }) {
     showToastFn = showToast;
     mountEl.innerHTML = getPanelHtml();
     bindPanelEvents(onLogout);
+    bindPasswordChangeForm(document.getElementById("superAdminPasswordChangeForm"));
     panelMounted = true;
     await loadPanelData();
 }

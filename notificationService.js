@@ -132,23 +132,4 @@ export function playNotificationSound() {
     }
 }
 
-export function showLiveNotificationToast(container, data) {
-    if (!container) return;
-
-    const el = document.createElement("div");
-    el.className = "live-notif";
-    el.innerHTML = `
-        <div class="live-notif__icon">🔔</div>
-        <div class="live-notif__body">
-            <strong>Yeni Randevu</strong>
-            <div>${data.customerName || "Müşteri"}</div>
-            <div class="live-notif__time">${data.time || "—"} · ${data.date || ""}</div>
-        </div>
-    `;
-    container.prepend(el);
-    setTimeout(() => el.classList.add("live-notif--show"), 10);
-    setTimeout(() => {
-        el.classList.remove("live-notif--show");
-        setTimeout(() => el.remove(), 300);
-    }, 6000);
-}
+export { showLiveNotificationToast } from "./notificationToast.js";

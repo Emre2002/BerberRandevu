@@ -112,6 +112,7 @@
             <button type="button" class="admin-tab" data-tab="services">✂️ Hizmetler</button>
             <button type="button" class="admin-tab" data-tab="deleted">🗑️ Silinen Randevular</button>
             <button type="button" class="admin-tab" data-tab="subscription">🔑 Abonelik</button>
+            <button type="button" class="admin-tab" data-tab="account">👤 Hesap</button>
         </div>
 
         <div class="admin-tab-panel" data-panel="calendar">
@@ -321,6 +322,21 @@
                         </div>
                         <p class="sub-hint">Shopier üzerinden satın aldığınız aktivasyon kodunu buraya girin.</p>
                     </div>
+                </div>
+            </section>
+        </div>
+
+        <div class="admin-tab-panel" data-panel="account" hidden>
+            <section class="section">
+                <div class="sa-card" style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:24px;max-width:480px;">
+                    <h2 class="section-title">Şifre Değiştir</h2>
+                    <form id="ownerPasswordChangeForm" autocomplete="off">
+                        <div class="form-group"><label for="ownerCurrentPassword">Mevcut Şifre</label><input id="ownerCurrentPassword" name="currentPassword" type="password" required autocomplete="current-password"></div>
+                        <div class="form-group"><label for="ownerNewPassword">Yeni Şifre</label><input id="ownerNewPassword" name="newPassword" type="password" required minlength="8" autocomplete="new-password"></div>
+                        <div class="form-group"><label for="ownerConfirmPassword">Yeni Şifre (Tekrar)</label><input id="ownerConfirmPassword" name="confirmPassword" type="password" required minlength="8" autocomplete="new-password"></div>
+                        <p data-password-status role="status" aria-live="polite"></p>
+                        <button type="submit" class="btn btn-primary">Şifreyi Değiştir</button>
+                    </form>
                 </div>
             </section>
         </div>

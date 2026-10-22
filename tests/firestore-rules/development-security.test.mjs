@@ -1,10 +1,12 @@
 import { describe, it, before, after } from "node:test";
+import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { initializeTestEnvironment, assertFails, assertSucceeds } from "@firebase/rules-unit-testing";
 import { doc, setDoc, updateDoc, getDoc, serverTimestamp } from "firebase/firestore";
 import { REPO_ROOT, RULES_TEST_PROJECT_ID, assertRulesTestGuards } from "./guards.mjs";
 import { seedRulesTestData, SHOP_A, SHOP_B, UID_OWNER_A, UID_OWNER_B, UID_NO_MEMBERSHIP } from "./fixtures.mjs";
+import { buildPublicBarberProjection } from "../../publicBarberProjection.js";
 
 describe("development Firestore rules", () => {
     let testEnv;
@@ -44,10 +46,19 @@ describe("development Firestore rules", () => {
         await assertSucceeds(updateDoc(doc(db, "berberler", SHOP_A), {
             selectedServices: ["Haircut"], openHour: "09:00", closeHour: "18:00"
         }));
-        await assertSucceeds(setDoc(doc(db, "publicBarbers", SHOP_A), {
-            selectedServices: ["Haircut"], openHour: "09:00", closeHour: "18:00",
+        const privateSnap = await getDoc(doc(db, "berberler", SHOP_A));
+        await assertFails(setDoc(doc(db, "publicBarbers", SHOP_A), {
+            ...buildPublicBarberProjection(privateSnap.data(), SHOP_A, { bookingOpen: true }),
             updatedAt: serverTimestamp()
         }, { merge: true }));
+        await assertSucceeds(updateDoc(doc(db, "publicBarbers", SHOP_A), {
+            selectedServices: ["Haircut"], openHour: "09:00", closeHour: "18:00",
+            updatedAt: serverTimestamp()
+        }));
+        const publicSnap = await getDoc(doc(db, "publicBarbers", SHOP_A));
+        assert.equal(publicSnap.data().openHour, "09:00");
+        assert.equal(publicSnap.data().closeHour, "18:00");
+        assert.deepEqual(publicSnap.data().selectedServices, ["Haircut"]);
     });
 
     it("rejects cross-tenant reads and updates", async () => {

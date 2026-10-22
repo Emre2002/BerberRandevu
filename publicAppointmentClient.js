@@ -1,5 +1,4 @@
-import { PRODUCTION_BASE_URL } from "./linkService.js";
-import { isLocalDevHost } from "./legacyAuthCompat.js";
+import { getBaseUrl } from "./linkService.js";
 import {
     mapPublicBookingHttpError,
     PUBLIC_BOOKING_ERROR_MESSAGES,
@@ -9,11 +8,7 @@ import {
 export { formatRateLimitMessage };
 
 function getApiBaseUrl() {
-    if (typeof window === "undefined") return PRODUCTION_BASE_URL;
-    if (isLocalDevHost(window.location.hostname)) {
-        return window.location.origin;
-    }
-    return PRODUCTION_BASE_URL;
+    return getBaseUrl();
 }
 
 /**

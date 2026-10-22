@@ -4,7 +4,6 @@ import {
     rejectPendingBarber,
     formatPendingDate,
     packageLabel,
-    buildWhatsAppApprovalLink,
     PACKAGE_OPTIONS
 } from "./pendingBarberService.js";
 
@@ -35,6 +34,7 @@ function getFiltered() {
 function statusBadge(status) {
     const map = {
         pending: { cls: "pb-badge--pending", label: "Bekleyen" },
+        processing: { cls: "pb-badge--pending", label: "Kontrol gerekli" },
         approved: { cls: "pb-badge--approved", label: "Onaylandı" },
         rejected: { cls: "pb-badge--rejected", label: "Reddedildi" }
     };
@@ -51,7 +51,6 @@ function cardHtml(p) {
         : p.status === "approved" && p.createdSlug
             ? `<div class="pb-card__actions">
                 <span class="pb-card__creds">Slug: <code>${escapeHtml(p.createdSlug)}</code></span>
-                <a href="${buildWhatsAppApprovalLink(p.phone, { slug: p.createdSlug, username: p.createdUsername, password: p.createdPassword })}" target="_blank" rel="noopener noreferrer" class="sa-btn sa-btn--ghost">📱 WhatsApp Gönder</a>
                </div>`
             : "";
 
@@ -167,13 +166,13 @@ export function bindPendingBarbersEvents(showToast, onApproved) {
                 const pending = patchCacheItem(id, {
                     status: "approved",
                     createdSlug: result.slug,
-                    createdUsername: result.username,
-                    createdPassword: result.password
+                    createdUsername: result.username
                 });
-                showToastFn(`"${result.slug}" dükkanı oluşturuldu.`);
+                showToastFn("İşletme hesabı oluşturuldu. Kullanıcı, kayıtlı e-posta adresiyle giriş ekranındaki Şifre Belirle seçeneğini kullanabilir.");
                 onApproved?.({ result, pending, pendingCount: getPendingCount() });
             } catch (err) {
                 showToastFn(err.message, "error");
+                await loadPendingBarbersPanel().catch(() => {});
             } finally {
                 approveBtn.disabled = false;
             }

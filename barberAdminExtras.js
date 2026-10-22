@@ -5,6 +5,7 @@ import {
 import {
     subscribeBarberNotifications, playNotificationSound, showLiveNotificationToast
 } from "./notificationService.js";
+import { renderCampaignHistory } from "./campaignHistoryView.js";
 
 /**
  * Berber paneli: canlı randevu bildirimleri.
@@ -70,19 +71,9 @@ export function initBarberMessaging(barberSlug, showToast) {
         if (!historyEl) return;
         try {
             const history = await fetchCampaignsByBarber(barberSlug);
-            if (!history.length) {
-                historyEl.innerHTML = `<p class="msg-empty">Henüz mesaj gönderilmedi.</p>`;
-                return;
-            }
-            historyEl.innerHTML = history.map((c) => {
-                const date = c.createdAt?.toDate?.() ? c.createdAt.toDate().toLocaleString("tr-TR") : "—";
-                return `<div class="msg-history-item">
-                <div class="msg-history-item__meta">${date} · ${c.recipientCount} alıcı</div>
-                <div class="msg-history-item__text">${c.message}</div>
-            </div>`;
-            }).join("");
+            renderCampaignHistory(historyEl, history);
         } catch {
-            historyEl.innerHTML = `<p class="msg-empty">Mesaj geçmişi yüklenemedi.</p>`;
+            renderCampaignHistory(historyEl, [], "Mesaj geçmişi yüklenemedi.");
         }
     }
 

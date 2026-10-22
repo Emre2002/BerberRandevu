@@ -1,12 +1,7 @@
-import { PRODUCTION_BASE_URL } from "./linkService.js";
-import { isLocalDevHost } from "./legacyAuthCompat.js";
+import { getBaseUrl } from "./linkService.js";
 
 function getApiBaseUrl() {
-    if (typeof window === "undefined") return PRODUCTION_BASE_URL;
-    if (isLocalDevHost(window.location.hostname)) {
-        return window.location.origin;
-    }
-    return PRODUCTION_BASE_URL;
+    return getBaseUrl();
 }
 
 const AVAILABILITY_MEMORY_TTL_MS = 15_000;
