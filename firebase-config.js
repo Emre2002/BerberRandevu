@@ -1,5 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getFirestore, connectFirestoreEmulator } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { firebaseRuntimeEnvironment } from "./firebase-runtime-config.js";
+import { DEVELOPMENT_PROJECT_ID, PRODUCTION_PROJECT_ID, selectFirebaseConfig } from "./firebase-environment.js";
 import {
     AUTH_EMULATOR_HOST,
     AUTH_EMULATOR_PORT,
@@ -63,15 +65,13 @@ export async function getResolveAuthIdentifierCallable() {
 
 export const FIREBASE_CONFIG_STORAGE_KEY = "berberFirebaseConfig";
 
-export const firebaseConfig = {
-    apiKey: "AIzaSyBTPR4IrARQWvmN6eOMMouse3ipz0zcns0",
-    authDomain: "berberrandevu-20a3e.firebaseapp.com",
-    projectId: "berberrandevu-20a3e",
-    storageBucket: "berberrandevu-20a3e.appspot.com",
-    messagingSenderId: "22655326053",
-    appId: "1:22655326053:web:e0a116cabb6228363cf38c",
-    measurementId: "G-C0NKCG9TVQ"
-};
+export const firebaseConfig = selectFirebaseConfig(firebaseRuntimeEnvironment);
+const expectedProjectId = firebaseRuntimeEnvironment === "production"
+    ? PRODUCTION_PROJECT_ID
+    : DEVELOPMENT_PROJECT_ID;
+if (firebaseConfig.projectId !== expectedProjectId) {
+    throw new Error("Firebase client project mismatch");
+}
 
 function loadStoredConfig() {
     try {
@@ -85,7 +85,7 @@ function loadStoredConfig() {
 
 export function buildFirebaseConfig() {
     const stored = loadStoredConfig();
-    if (stored?.apiKey) {
+    if (stored?.apiKey && stored.projectId === expectedProjectId) {
         return { ...firebaseConfig, ...stored };
     }
     return { ...firebaseConfig };
@@ -104,6 +104,9 @@ export function saveFirebaseConfig(config) {
 
     if (!cleaned.apiKey || !cleaned.authDomain || !cleaned.projectId || !cleaned.appId) {
         throw new Error("apiKey, authDomain, projectId ve appId zorunludur.");
+    }
+    if (cleaned.projectId !== expectedProjectId) {
+        throw new Error("Firebase project ID does not match the active environment");
     }
 
     localStorage.setItem(FIREBASE_CONFIG_STORAGE_KEY, JSON.stringify(cleaned));

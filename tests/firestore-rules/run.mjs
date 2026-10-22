@@ -15,14 +15,16 @@ const TEST_FILES = {
     config: resolve(__dirname, "config-path.test.mjs"),
     current: resolve(__dirname, "current-characterization.test.mjs"),
     target: resolve(__dirname, "target-requirements.test.mjs"),
-    candidate: resolve(__dirname, "candidate", "candidate-security.test.mjs")
+    candidate: resolve(__dirname, "candidate", "candidate-security.test.mjs"),
+    development: resolve(__dirname, "development-security.test.mjs")
 };
 
 const CONFIG_BY_TARGET = {
     config: null,
     current: "firebase.rules-test.json",
     target: "firebase.rules-test.json",
-    candidate: "firebase.rules-phase4b.json"
+    candidate: "firebase.rules-phase4b.json",
+    development: "firebase.development.json"
 };
 
 const file = TEST_FILES[target];
