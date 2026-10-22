@@ -245,29 +245,41 @@ async function maybeSendTelegram(db, { businessId, customerName, phone, date, ti
 }
 
 async function runBestEffortSideEffects(db, payload) {
+    const timings = {};
+    let startedAt = Date.now();
     try {
         await upsertCustomerOnAppointment(db, payload);
     } catch (err) {
         console.warn("[create-appointment] customer upsert failed:", err?.code || "internal");
+    } finally {
+        timings.customerUpsertMs = Date.now() - startedAt;
     }
 
+    startedAt = Date.now();
     try {
         await createNotification(db, payload);
     } catch (err) {
         console.warn("[create-appointment] notification failed:", err?.code || "internal");
+    } finally {
+        timings.notificationMs = Date.now() - startedAt;
     }
 
+    startedAt = Date.now();
     try {
         await maybeSendTelegram(db, payload);
     } catch (err) {
         console.warn("[create-appointment] telegram failed:", err?.code || "internal");
+    } finally {
+        timings.telegramMs = Date.now() - startedAt;
     }
+    return timings;
 }
 
 /**
  * @param {import('firebase-admin/firestore').Firestore} db
  */
 export async function createPublicAppointment(db, input, { clientIp = "unknown", ownerContext = false } = {}) {
+    const coreStartedAt = Date.now();
     const rawSlug = String(input.dukkan || input.shop || input.barberSlug || input.businessId || "").trim();
     const customerName = cleanDisplayName(input.customerName);
     const phoneRaw = String(input.phone || "").trim();
@@ -316,7 +328,8 @@ export async function createPublicAppointment(db, input, { clientIp = "unknown",
                     date: String(idemData.date || date),
                     time: normalizeTimeHHmm(String(idemData.time || time)),
                     status: "confirmed",
-                    idempotentReplay: true
+                    idempotentReplay: true,
+                    timings: { validationRateLimitMs: Date.now() - coreStartedAt, transactionMs: 0 }
                 };
             }
         }
@@ -425,6 +438,8 @@ export async function createPublicAppointment(db, input, { clientIp = "unknown",
         : null;
 
     let committedAppointmentId = appointmentRef.id;
+    const validationRateLimitMs = Date.now() - coreStartedAt;
+    const transactionStartedAt = Date.now();
 
     try {
         const txnResult = await db.runTransaction(async (tx) => {
@@ -579,7 +594,8 @@ export async function createPublicAppointment(db, input, { clientIp = "unknown",
                 date,
                 time,
                 status: "confirmed",
-                idempotentReplay: true
+                idempotentReplay: true,
+                timings: { validationRateLimitMs, transactionMs: Date.now() - transactionStartedAt }
             };
         }
 
@@ -591,7 +607,9 @@ export async function createPublicAppointment(db, input, { clientIp = "unknown",
         throw wrapped;
     }
 
-    await runBestEffortSideEffects(db, {
+    const transactionMs = Date.now() - transactionStartedAt;
+    const sideEffectsStartedAt = Date.now();
+    const sideEffectTimings = await runBestEffortSideEffects(db, {
         businessId,
         customerName,
         phone: displayPhone,
@@ -607,7 +625,13 @@ export async function createPublicAppointment(db, input, { clientIp = "unknown",
         date,
         time,
         status: "confirmed",
-        notificationQueued: !ownerContext
+        notificationQueued: !ownerContext,
+        timings: {
+            validationRateLimitMs,
+            transactionMs,
+            sideEffectsMs: Date.now() - sideEffectsStartedAt,
+            ...sideEffectTimings
+        }
     };
 }
 

@@ -26,7 +26,10 @@ function getApiBaseUrl() {
  */
 export async function submitPublicAppointment(payload) {
     const url = `${getApiBaseUrl()}/api/public/create-appointment`;
-    const response = await fetch(url, {
+    const startedAt = performance.now();
+    let response;
+    try {
+        response = await fetch(url, {
         method: "POST",
         headers: {
             "Content-Type": "application/json",
@@ -43,7 +46,11 @@ export async function submitPublicAppointment(payload) {
             website: payload.website || "",
             idempotencyKey: payload.idempotencyKey || ""
         })
-    });
+        });
+    } catch (err) {
+        console.info("[booking/post-timing]", { outcome: "network_error", postMs: Math.round(performance.now() - startedAt) });
+        throw err;
+    }
 
     let data = null;
     try {
@@ -51,6 +58,11 @@ export async function submitPublicAppointment(payload) {
     } catch {
         data = null;
     }
+    console.info("[booking/post-timing]", {
+        requestId: data?.requestId || response.headers.get("x-request-id") || null,
+        status: response.status,
+        postMs: Math.round(performance.now() - startedAt)
+    });
 
     if (!response.ok) {
         throw mapPublicBookingHttpError(response, data);

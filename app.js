@@ -36,8 +36,7 @@ import {
     fetchPublicAvailability,
     checkPublicPhoneDuplicate,
     mapPublicAvailabilityToDayData,
-    invalidateAvailabilityMemoryCache,
-    nextAvailabilityRequestSequence
+    invalidateAvailabilityMemoryCache
 } from "./publicAvailabilityClient.js";
 import {
     getIstanbulTodayYmd,
@@ -602,10 +601,19 @@ async function fetchBlockedSlotsCollection(date, slots) {
 // Cache anahtarı: date + openHour + closeHour (çalışma saati değişince eski veri kullanılmaz).
 const DAY_CACHE_TTL_MS = 20000;
 const dayDataCache = new Map(); // cacheKey -> { ts, data }
+const dayCacheVersions = new Map();
 
 function invalidateDay(date) {
+    const keys = new Set([dayCacheKey(date)]);
     for (const key of [...dayDataCache.keys()]) {
-        if (key.startsWith(`${date}|`)) dayDataCache.delete(key);
+        if (key.startsWith(`${date}|`)) keys.add(key);
+    }
+    for (const key of dayCacheVersions.keys()) {
+        if (key.startsWith(`${date}|`)) keys.add(key);
+    }
+    for (const key of keys) {
+        dayDataCache.delete(key);
+        dayCacheVersions.set(key, (dayCacheVersions.get(key) || 0) + 1);
     }
     if (isCustomerBookingPage()) {
         invalidateAvailabilityMemoryCache(getTenantBusinessId(), date);
@@ -636,32 +644,40 @@ function applyBookedSlotToDayCache(date, time, appointment = { status: "confirme
 
 function invalidateAllDayCache() {
     dayDataCache.clear();
+    for (const key of dayCacheVersions.keys()) {
+        dayCacheVersions.set(key, (dayCacheVersions.get(key) || 0) + 1);
+    }
 }
 
 let activeAvailabilitySequence = 0;
 
-async function fetchPublicDayData(date, { force = false, sequence = null } = {}) {
+async function fetchPublicDayData(date, { force = false } = {}) {
     const cacheKey = dayCacheKey(date);
 
-    if (!force) {
+    if (force) {
+        dayDataCache.delete(cacheKey);
+        dayCacheVersions.set(cacheKey, (dayCacheVersions.get(cacheKey) || 0) + 1);
+    } else {
         const cached = dayDataCache.get(cacheKey);
         if (cached && Date.now() - cached.ts < DAY_CACHE_TTL_MS) {
             return cached.data;
         }
     }
 
-    const apiPayload = await fetchPublicAvailability(getTenantBusinessId(), date, {
-        force,
-        sequence: sequence ?? nextAvailabilityRequestSequence()
-    });
+    const version = dayCacheVersions.get(cacheKey) || 0;
+    dayCacheVersions.set(cacheKey, version);
+    const apiPayload = await fetchPublicAvailability(getTenantBusinessId(), date, { force });
+    if (dayCacheVersions.get(cacheKey) !== version) {
+        throw Object.assign(new Error("availability_response_stale"), { code: "availability_response_stale" });
+    }
     const data = mapPublicAvailabilityToDayData(apiPayload);
-    dayDataCache.set(cacheKey, { ts: Date.now(), data, sequence: sequence ?? activeAvailabilitySequence });
+    dayDataCache.set(cacheKey, { ts: Date.now(), data });
     return data;
 }
 
-async function getDayData(date, { force = false, sequence = null } = {}) {
+async function getDayData(date, { force = false } = {}) {
     if (isCustomerBookingPage()) {
-        return fetchPublicDayData(date, { force, sequence });
+        return fetchPublicDayData(date, { force });
     }
 
     if (!db) {
@@ -730,9 +746,9 @@ function getWeekDates(monday) {
     });
 }
 
-function countAvailableSlots(appointments, blocked, dayClosed) {
+function countAvailableSlots(date, appointments, blocked, dayClosed) {
     if (dayClosed) return 0;
-    return getVisibleSlots().filter(t => !appointments[t] && !blocked.has(t)).length;
+    return getVisibleSlots().filter(t => !isPastAppointmentSlot(date, t) && !appointments[t] && !blocked.has(t)).length;
 }
 
 function renderSlotsChecking(container, date) {
@@ -779,6 +795,9 @@ function renderSlots(container, date, appointments, blocked, dayClosed, onSelect
         if (blocked.has(time)) {
             slotEl.classList.add("slot--closed");
             slotEl.title = "Kapalı";
+        } else if (isCustomerBookingPage() && isPastAppointmentSlot(date, time)) {
+            slotEl.classList.add("slot--closed");
+            slotEl.title = "Saat geçti";
         } else if (appointments[time]) {
             slotEl.classList.add("slot--booked");
             slotEl.title = "Dolu";
@@ -1118,27 +1137,15 @@ async function initCustomerPage() {
     }
 
     async function loadTodayCount() {
+        const today = getToday();
         try {
-            const { appointments, blocked, dayClosed } = await getDayData(getToday());
-            if (availableCountEl) {
-                // Sadece çalışma saatleri içindeki slotlar üzerinden net boş sayısını hesaplıyoruz
-                let realCount = 0;
-                getVisibleSlots().forEach(time => {
-                    const isBlocked = blocked && (blocked.has ? blocked.has(time) : blocked[time]);
-                    const isBooked = appointments && appointments[time];
-                    
-                    // Eğer gün tamamen kapalı değilse, saat kapatılmamışsa ve randevu yoksa boştur
-                    if (!dayClosed && !isBlocked && !isBooked) {
-                        realCount++;
-                    }
-                });
-                
-                // Eğer gün tamamen kapalıysa direkt 0 yaz, değilse gerçek boş sayısını yaz kanka
-                availableCountEl.textContent = dayClosed ? 0 : realCount;
-            }
+            const { appointments, blocked, dayClosed } = await getDayData(today);
+            if (availableCountEl && today === getToday())
+                availableCountEl.textContent = countAvailableSlots(today, appointments, blocked, dayClosed);
         } catch (err) {
-            console.error(err);
-            if (availableCountEl) availableCountEl.textContent = "-";
+            if (err?.code === "availability_request_aborted" || err?.code === "availability_response_stale") return;
+            console.error("availability_count_failed", err?.code || "unknown");
+            if (availableCountEl && today === getToday()) availableCountEl.textContent = "-";
         }
     }
 
@@ -1146,28 +1153,26 @@ async function initCustomerPage() {
         const date = belirliTarih || dateInput?.value;
         if (!date) return;
 
-        const requestSequence = nextAvailabilityRequestSequence();
-        activeAvailabilitySequence = requestSequence;
+        const requestSequence = ++activeAvailabilitySequence;
 
         renderSlotsChecking(slotsContainer, date);
         selectedSlot = null;
         updateBookButton();
 
         try {
-            const { appointments, blocked, dayClosed } = await getDayData(date, {
-                sequence: requestSequence
-            });
+            const { appointments, blocked, dayClosed } = await getDayData(date);
 
             if (requestSequence !== activeAvailabilitySequence) {
                 return;
             }
 
             if (date === getToday() && availableCountEl) {
-                availableCountEl.textContent = countAvailableSlots(appointments, blocked, dayClosed);
+                availableCountEl.textContent = countAvailableSlots(date, appointments, blocked, dayClosed);
             }
 
             renderSlots(slotsContainer, date, appointments, blocked, dayClosed, onSlotSelect);
         } catch (err) {
+            if (requestSequence !== activeAvailabilitySequence) return;
             if (err?.code === "availability_request_aborted" || err?.code === "availability_response_stale") {
                 return;
             }
@@ -1252,26 +1257,36 @@ async function initCustomerPage() {
             lastSubmitAt = Date.now();
             btnBook.disabled = true;
             btnBook.textContent = "Kaydediliyor...";
+            const bookingStartedAt = performance.now();
+            const bookingTimings = {};
+            let bookingOutcome = "failed";
+            const measureBookingStep = async (name, operation) => {
+                const startedAt = performance.now();
+                try { return await operation(); }
+                finally { bookingTimings[name] = Math.round(performance.now() - startedAt); }
+            };
 
             try {
                 // Yarış koşulunu önlemek için yazmadan hemen önce TAZE veri oku (cache bypass).
-                const { appointments, blocked, dayClosed } = await getDayData(date, { force: true });
+                const { appointments, blocked, dayClosed } = await measureBookingStep("availabilityMs", () => getDayData(date, { force: true }));
 
                 if (dayClosed || blocked.has(selectedSlot) || appointments[selectedSlot]) {
                     showToast("Seçilen saat artık uygun değil.", "error");
                     selectedSlot = null;
-                    await loadAvailableSlots();
+                    await measureBookingStep("refreshMs", () => loadAvailableSlots());
+                    bookingOutcome = "slot_unavailable";
                     return;
                 }
 
-                const duplicate = isCustomerBookingPage()
+                const duplicate = await measureBookingStep("duplicateCheckMs", async () => isCustomerBookingPage()
                     ? await checkPublicPhoneDuplicate({
                         businessSlug: getTenantBusinessId(),
                         date,
                         phone
                     })
-                    : Boolean(findActiveAppointmentByPhoneOnDay({ appointments, phone }));
+                    : Boolean(findActiveAppointmentByPhoneOnDay({ appointments, phone })));
                 if (duplicate) {
+                    bookingOutcome = "duplicate";
                     phoneDuplicateBlocked = true;
                     showDuplicateAppointmentModal();
                     updateBookButton();
@@ -1282,7 +1297,7 @@ async function initCustomerPage() {
                 const customerNoteEl = document.getElementById("customerNote");
                 const musteriNotu = customerNoteEl ? customerNoteEl.value.trim() : "";
 
-                await createAppointmentWithEffects({
+                await measureBookingStep("bookingPostMs", () => createAppointmentWithEffects({
                     barberId: aktifDukkan,
                     customerName,
                     phone,
@@ -1293,7 +1308,7 @@ async function initCustomerPage() {
                     musteriNotu,
                     website: document.getElementById("bookingHoneypot")?.value?.trim() || "",
                     idempotencyKey: getOrCreateBookingIdempotencyKey()
-                });
+                }));
 
                 const bookedTime = selectedSlot;
                 applyBookedSlotToDayCache(date, bookedTime, { legacy: false, status: "confirmed" });
@@ -1333,10 +1348,13 @@ async function initCustomerPage() {
                 // Bu gün değişti: cache'i temizle ki reload taze okusun. "Bugün"
                 // sayacı ise (farklı gün seçiliyse) cache'ten 0 okuma ile gelir.
                 invalidateDay(date);
-                await loadAvailableSlots();
-                await loadTodayCount();
+                await measureBookingStep("refreshMs", async () => {
+                    await loadAvailableSlots();
+                    await loadTodayCount();
+                });
+                bookingOutcome = "created";
             } catch (err) {
-                console.error(err);
+                console.error("booking_failed", err?.code || "unknown");
                 const conflictDate = dateInput?.value;
 
                 if (isCustomerBookingPage() && isPublicSlotConflictError(err)) {
@@ -1354,6 +1372,11 @@ async function initCustomerPage() {
 
                 showToast(customerErrorMessage(err), "error");
             } finally {
+                console.info("[booking/timing]", {
+                    outcome: bookingOutcome,
+                    ...bookingTimings,
+                    totalMs: Math.round(performance.now() - bookingStartedAt)
+                });
                 finishBookingSubmit();
             }
         });
