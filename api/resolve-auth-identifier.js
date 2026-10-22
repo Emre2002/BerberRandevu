@@ -29,8 +29,12 @@ export default async function handler(req, res) {
             return;
         }
 
-        const roleHint = body.roleHint === "superAdmin" ? "superAdmin" : "owner";
-        const result = await resolveAuthIdentifier(body.username, { roleHint });
+        // Anonymous username lookup must not disclose a Superadmin's real Auth email.
+        if (body.roleHint === "superAdmin") {
+            sendError(res, 404, GENERIC_AUTH_ERROR, "Invalid credentials.");
+            return;
+        }
+        const result = await resolveAuthIdentifier(body.username, { roleHint: "owner" });
 
         if (!result.ok) {
             sendError(res, 404, GENERIC_AUTH_ERROR, "Invalid credentials.");
