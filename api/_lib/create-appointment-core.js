@@ -36,6 +36,7 @@ export const BOOKING_HTTP_MESSAGES = {
     business_not_found: "İşletme bilgileri bulunamadı.",
     slot_unavailable: "Bu saat kısa süre önce doldu. Lütfen başka bir saat seçin.",
     duplicate_phone_day: "Bu telefon numarası ile bugün için zaten bir randevu bulunmaktadır. Gün içerisinde yalnızca 1 randevu oluşturabilirsiniz.",
+    booking_closed: "Bu işletme şu anda online randevu kabul etmiyor.",
     appointment_in_past: "Geçmiş bir tarih veya saate randevu oluşturulamaz.",
     invalid_request: "Lütfen randevu bilgilerini kontrol edin.",
     invalid_phone: "Telefon numarası geçerli değil.",
@@ -227,6 +228,10 @@ async function createNotification(db, { businessId, customerName, phone, date, t
 }
 
 async function maybeSendTelegram(db, { businessId, customerName, phone, date, time }) {
+    // Explicit server-side opt-in; keep disabled until Telegram is requested again.
+    // Return before any private business lookup or bot credential access.
+    if (process.env.TELEGRAM_NOTIFICATIONS_ENABLED !== "true") return;
+
     const barberSnap = await db.collection("berberler").doc(businessId).get();
     const chatId = barberSnap.exists ? barberSnap.data()?.telegramChatId : null;
     if (!chatId) return;
@@ -668,6 +673,9 @@ export function mapBookingErrorToHttp(err, { requestId = null } = {}) {
     if (code === "duplicate_phone_day") {
         return { status: 409, body: buildErrorBody("duplicate_phone_day", requestId) };
     }
+    if (code === "booking_closed") {
+        return { status: 400, body: buildErrorBody("booking_closed", requestId) };
+    }
     if (
         code === "slot_taken"
         || code === "slot_blocked"
@@ -688,7 +696,6 @@ export function mapBookingErrorToHttp(err, { requestId = null } = {}) {
         code === "invalid_request"
         || code === "invalid_slot"
         || code === "shop_passive"
-        || code === "booking_closed"
         || code === "spam_detected"
     ) {
         return { status: 400, body: buildErrorBody("invalid_request", requestId) };

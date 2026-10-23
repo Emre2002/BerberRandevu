@@ -213,6 +213,8 @@ describe("success quota atomic transaction", () => {
     const envBackup = {};
 
     beforeEach(() => {
+        envBackup.TELEGRAM_NOTIFICATIONS_ENABLED = process.env.TELEGRAM_NOTIFICATIONS_ENABLED;
+        delete process.env.TELEGRAM_NOTIFICATIONS_ENABLED;
         envBackup.BOOKING_SUCCESS_MAX = process.env.BOOKING_SUCCESS_MAX;
         envBackup.BOOKING_IP_SUCCESS_MAX = process.env.BOOKING_IP_SUCCESS_MAX;
         envBackup.BOOKING_BURST_MAX = process.env.BOOKING_BURST_MAX;
@@ -380,6 +382,67 @@ describe("success quota atomic transaction", () => {
         const appointmentDocs = [...docs.entries()].filter(([key]) => key.startsWith("appointments/"));
         assert.equal(appointmentDocs.length, 1);
     });
+
+    it("rejects a second booking for the same phone and day even at another slot", async () => {
+        const { db, docs } = createBookingMockDb();
+        seedPublicBusiness(docs, "shop-a");
+        process.env.BOOKING_SUCCESS_MAX = "10";
+        const date = futureDate(17);
+        await createPublicAppointment(db, bookingInput({ date, time: "12:00" }), { clientIp: "203.0.113.20" });
+        await assert.rejects(
+            createPublicAppointment(db, bookingInput({ date, time: "13:00" }), { clientIp: "203.0.113.21" }),
+            { code: "duplicate_phone_day" }
+        );
+        assert.equal([...docs.keys()].filter(key => key.startsWith("appointments/")).length, 1);
+    });
+
+    for (const ownerContext of [false, true]) {
+        it(`preserves booking, customer, notification and replay without Telegram (owner=${ownerContext})`, async () => {
+            const { db, docs } = createBookingMockDb();
+            seedPublicBusiness(docs, "shop-a");
+            docs.set("berberler/shop-a", { telegramChatId: "fake-chat" });
+            const originalCollection = db.collection;
+            let privateBusinessReads = 0;
+            db.collection = name => {
+                const collection = originalCollection(name);
+                if (name === "berberler") {
+                    const originalDoc = collection.doc;
+                    collection.doc = id => {
+                        const ref = originalDoc(id);
+                        const originalGet = ref.get;
+                        ref.get = () => { privateBusinessReads++; return originalGet(); };
+                        return ref;
+                    };
+                }
+                return collection;
+            };
+            const originalFetch = globalThis.fetch;
+            let httpCalls = 0;
+            globalThis.fetch = async () => { httpCalls++; throw new Error("Unexpected HTTP request"); };
+            try {
+                const input = bookingInput({ idempotencyKey: `telegram-off-${ownerContext}` });
+                const options = { ownerContext, clientIp: "203.0.113.30" };
+                const result = await createPublicAppointment(db, input, options);
+                assert.equal(result.ok, true);
+                assert.equal(privateBusinessReads, 0);
+                const customer = docs.get("customers/shop-a_5551234567");
+                assert.equal(customer.displayName, input.customerName);
+                assert.equal(customer.totalAppointments, 1);
+                assert.equal(customer.lastAppointmentDate, input.date);
+                const notifications = [...docs.entries()].filter(([key]) => key.startsWith("notifications/"));
+                assert.equal(notifications.length, 1);
+                assert.equal(notifications[0][1].type, "newAppointment");
+                const replay = await createPublicAppointment(db, input, options);
+                assert.equal(replay.appointmentId, result.appointmentId);
+                assert.equal(replay.idempotentReplay, true);
+                assert.equal(docs.get("customers/shop-a_5551234567").totalAppointments, 1);
+                assert.equal([...docs.keys()].filter(key => key.startsWith("notifications/")).length, 1);
+                assert.equal(httpCalls, 0);
+            } finally {
+                globalThis.fetch = originalFetch;
+            }
+        });
+    }
 });
 
 describe("request-day bucket semantics", () => {

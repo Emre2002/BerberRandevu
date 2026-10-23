@@ -71,6 +71,14 @@ describe("public booking error architecture", () => {
         assert.equal(isPublicSlotConflictError({ status: 409, code: "slot_unavailable" }), true);
         assert.equal(isPublicDuplicatePhoneError({ code: "duplicate_phone_day" }), true);
         assert.equal(isPublicSlotConflictError({ code: "duplicate_phone_day" }), false);
+        assert.equal(isPublicSlotConflictError({ status: 409, code: "duplicate_phone_day" }), false);
+    });
+
+    it("shows the server's booking-closed reason", () => {
+        const mapped = mapBookingErrorToHttp({ code: "booking_closed" });
+        const error = mapPublicBookingHttpError({ status: mapped.status, headers: { get: () => null } }, mapped.body);
+        assert.equal(error.code, "booking_closed");
+        assert.match(resolvePublicBookingUserMessage(error), /randevu kabul etmiyor/);
     });
 
     it("server mapBookingErrorToHttp includes sanitized message and requestId", () => {
@@ -103,10 +111,12 @@ describe("public booking conflict UX", () => {
         assert.match(submitBlock, /customerErrorMessage\(err\)/);
     });
 
-    it("uses server phone duplicate check on public submit", () => {
+    it("keeps the optional early phone check, but not in the public submit path", () => {
         const src = readFileSync(resolve(ROOT, "app.js"), "utf8");
-        assert.match(src, /checkPublicPhoneDuplicate/);
-        assert.match(src, /isCustomerBookingPage\(\)[\s\S]*checkPublicPhoneDuplicate/);
+        const earlyCheck = src.slice(src.indexOf("async function checkPhoneDuplicateForSelectedDate"), src.indexOf("const dateInput", src.indexOf("async function checkPhoneDuplicateForSelectedDate")));
+        const submit = src.slice(src.indexOf('btnBook.addEventListener("click"'), src.indexOf("await Promise.all([loadAvailableSlots(), loadTodayCount()])"));
+        assert.match(earlyCheck, /checkPublicPhoneDuplicate/);
+        assert.doesNotMatch(submit, /checkPublicPhoneDuplicate/);
     });
 });
 
