@@ -396,6 +396,76 @@ describe("success quota atomic transaction", () => {
         assert.equal([...docs.keys()].filter(key => key.startsWith("appointments/")).length, 1);
     });
 
+    for (const failure of [null, "customer", "notification", "both"]) {
+        it(`awaits parallel side effects independently with failure=${failure}`, async () => {
+            const { db, docs } = createBookingMockDb();
+            seedPublicBusiness(docs, "shop-a");
+            const starts = [];
+            let releaseCustomer, releaseNotification;
+            const customerGate = new Promise(resolve => { releaseCustomer = resolve; });
+            const notificationGate = new Promise(resolve => { releaseNotification = resolve; });
+            const originalCollection = db.collection;
+            db.collection = name => {
+                const collection = originalCollection(name);
+                if (name === "customers") {
+                    const originalDoc = collection.doc;
+                    collection.doc = id => {
+                        const ref = originalDoc(id);
+                        const originalGet = ref.get;
+                        ref.get = async () => {
+                            starts.push("customer");
+                            await customerGate;
+                            if (["customer", "both"].includes(failure)) throw { code: "fixture_customer_error" };
+                            return originalGet();
+                        };
+                        return ref;
+                    };
+                }
+                if (name === "notifications") {
+                    const originalAdd = collection.add;
+                    collection.add = async payload => {
+                        starts.push("notification");
+                        await notificationGate;
+                        if (["notification", "both"].includes(failure)) throw { code: "fixture_notification_error" };
+                        return originalAdd(payload);
+                    };
+                }
+                return collection;
+            };
+            const warnings = [];
+            const originalWarn = console.warn;
+            console.warn = (...args) => warnings.push(args);
+            try {
+                let completed = false;
+                const pending = createPublicAppointment(db, bookingInput(), { clientIp: "203.0.113.40" })
+                    .then(result => { completed = true; return result; });
+                await new Promise(resolve => setImmediate(resolve));
+                assert.deepEqual(starts, ["customer", "notification"]);
+                assert.equal(completed, false);
+                // Release the failing side first: the other must still be awaited.
+                if (failure === "notification") releaseNotification();
+                else releaseCustomer();
+                await new Promise(resolve => setImmediate(resolve));
+                assert.equal(completed, false);
+                releaseCustomer(); releaseNotification();
+                const result = await pending;
+                assert.equal(result.ok, true, "committed booking remains successful under best effort");
+                const customerFailed = ["customer", "both"].includes(failure);
+                const notificationFailed = ["notification", "both"].includes(failure);
+                assert.equal(docs.has("customers/shop-a_5551234567"), !customerFailed);
+                assert.equal([...docs.keys()].filter(key => key.startsWith("notifications/")).length, notificationFailed ? 0 : 1);
+                assert.equal(result.notificationQueued, !notificationFailed);
+                assert.equal(warnings.some(([label]) => label.includes("customer upsert failed")), customerFailed);
+                assert.equal(warnings.some(([label]) => label.includes("notification failed")), notificationFailed);
+                for (const key of ["businessIpBurstMs", "bookingAttemptMs", "validationRateLimitMs", "transactionMs", "customerUpsertMs", "notificationMs", "telegramMs", "sideEffectsMs"]) {
+                    assert.ok(Number.isFinite(result.timings[key]) && result.timings[key] >= 0, key);
+                }
+                assert.ok(result.timings.sideEffectsMs >= result.timings.customerUpsertMs);
+                assert.ok(result.timings.sideEffectsMs >= result.timings.notificationMs);
+            } finally { console.warn = originalWarn; releaseCustomer(); releaseNotification(); }
+        });
+    }
+
     for (const ownerContext of [false, true]) {
         it(`preserves booking, customer, notification and replay without Telegram (owner=${ownerContext})`, async () => {
             const { db, docs } = createBookingMockDb();

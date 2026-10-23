@@ -251,25 +251,25 @@ async function maybeSendTelegram(db, { businessId, customerName, phone, date, ti
 
 async function runBestEffortSideEffects(db, payload) {
     const timings = {};
-    let startedAt = Date.now();
-    try {
-        await upsertCustomerOnAppointment(db, payload);
-    } catch (err) {
-        console.warn("[create-appointment] customer upsert failed:", err?.code || "internal");
-    } finally {
-        timings.customerUpsertMs = Date.now() - startedAt;
+    const measure = async (name, operation) => {
+        const startedAt = Date.now();
+        try { await operation(); }
+        finally { timings[name] = Date.now() - startedAt; }
+    };
+    // These write separate collections and depend only on the committed payload.
+    // Await both even if one fails; their durations overlap, so do not sum them.
+    const [customerResult, notificationResult] = await Promise.allSettled([
+        measure("customerUpsertMs", () => upsertCustomerOnAppointment(db, payload)),
+        measure("notificationMs", () => createNotification(db, payload))
+    ]);
+    if (customerResult.status === "rejected") {
+        console.warn("[create-appointment] customer upsert failed:", customerResult.reason?.code || "internal");
+    }
+    if (notificationResult.status === "rejected") {
+        console.warn("[create-appointment] notification failed:", notificationResult.reason?.code || "internal");
     }
 
-    startedAt = Date.now();
-    try {
-        await createNotification(db, payload);
-    } catch (err) {
-        console.warn("[create-appointment] notification failed:", err?.code || "internal");
-    } finally {
-        timings.notificationMs = Date.now() - startedAt;
-    }
-
-    startedAt = Date.now();
+    const startedAt = Date.now();
     try {
         await maybeSendTelegram(db, payload);
     } catch (err) {
@@ -277,7 +277,7 @@ async function runBestEffortSideEffects(db, payload) {
     } finally {
         timings.telegramMs = Date.now() - startedAt;
     }
-    return timings;
+    return { timings, notificationCreated: notificationResult.status === "fulfilled" };
 }
 
 /**
@@ -285,6 +285,7 @@ async function runBestEffortSideEffects(db, payload) {
  */
 export async function createPublicAppointment(db, input, { clientIp = "unknown", ownerContext = false } = {}) {
     const coreStartedAt = Date.now();
+    const rateLimitTimings = { businessIpBurstMs: 0, bookingAttemptMs: 0 };
     const rawSlug = String(input.dukkan || input.shop || input.barberSlug || input.businessId || "").trim();
     const customerName = cleanDisplayName(input.customerName);
     const phoneRaw = String(input.phone || "").trim();
@@ -315,7 +316,9 @@ export async function createPublicAppointment(db, input, { clientIp = "unknown",
     }
 
     if (!ownerContext) {
+        const startedAt = Date.now();
         await enforceCreateIpBusinessBurstLimit(db, businessId, clientIp);
+        rateLimitTimings.businessIpBurstMs = Date.now() - startedAt;
     }
 
     const idempotencyDocId = idempotencyKey ? hashIdempotencyKey(idempotencyKey) : null;
@@ -334,7 +337,7 @@ export async function createPublicAppointment(db, input, { clientIp = "unknown",
                     time: normalizeTimeHHmm(String(idemData.time || time)),
                     status: "confirmed",
                     idempotentReplay: true,
-                    timings: { validationRateLimitMs: Date.now() - coreStartedAt, transactionMs: 0 }
+                    timings: { ...rateLimitTimings, validationRateLimitMs: Date.now() - coreStartedAt, transactionMs: 0 }
                 };
             }
         }
@@ -386,7 +389,9 @@ export async function createPublicAppointment(db, input, { clientIp = "unknown",
     const displayPhone = phoneOptional ? "—" : phoneRaw.replace(/\s/g, "");
 
     if (!ownerContext) {
+        const startedAt = Date.now();
         await enforceBookingAttemptLimit(db, businessId, normalizedPhone);
+        rateLimitTimings.bookingAttemptMs = Date.now() - startedAt;
     }
 
     const publicSnap = await db.collection("publicBarbers").doc(businessId).get();
@@ -600,7 +605,7 @@ export async function createPublicAppointment(db, input, { clientIp = "unknown",
                 time,
                 status: "confirmed",
                 idempotentReplay: true,
-                timings: { validationRateLimitMs, transactionMs: Date.now() - transactionStartedAt }
+                timings: { ...rateLimitTimings, validationRateLimitMs, transactionMs: Date.now() - transactionStartedAt }
             };
         }
 
@@ -614,7 +619,7 @@ export async function createPublicAppointment(db, input, { clientIp = "unknown",
 
     const transactionMs = Date.now() - transactionStartedAt;
     const sideEffectsStartedAt = Date.now();
-    const sideEffectTimings = await runBestEffortSideEffects(db, {
+    const { timings: sideEffectTimings, notificationCreated } = await runBestEffortSideEffects(db, {
         businessId,
         customerName,
         phone: displayPhone,
@@ -630,8 +635,9 @@ export async function createPublicAppointment(db, input, { clientIp = "unknown",
         date,
         time,
         status: "confirmed",
-        notificationQueued: !ownerContext,
+        notificationQueued: notificationCreated,
         timings: {
+            ...rateLimitTimings,
             validationRateLimitMs,
             transactionMs,
             sideEffectsMs: Date.now() - sideEffectsStartedAt,
