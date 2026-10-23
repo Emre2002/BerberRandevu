@@ -788,21 +788,29 @@ function renderSlots(container, date, appointments, blocked, dayClosed, onSelect
     }
 
     visibleSlots.forEach(time => {
-        const slotEl = document.createElement("div");
+        const slotEl = document.createElement(isCustomerBookingPage() ? "button" : "div");
         slotEl.classList.add("slot");
+        if (isCustomerBookingPage()) slotEl.type = "button";
         slotEl.textContent = time;
 
         if (blocked.has(time)) {
             slotEl.classList.add("slot--closed");
             slotEl.title = "Kapalı";
+            if (isCustomerBookingPage()) slotEl.disabled = true;
         } else if (isCustomerBookingPage() && isPastAppointmentSlot(date, time)) {
             slotEl.classList.add("slot--closed");
             slotEl.title = "Saat geçti";
+            slotEl.disabled = true;
         } else if (appointments[time]) {
             slotEl.classList.add("slot--booked");
             slotEl.title = "Dolu";
+            if (isCustomerBookingPage()) slotEl.disabled = true;
         } else {
             slotEl.classList.add("slot--available");
+            if (isCustomerBookingPage()) {
+                slotEl.setAttribute("aria-label", `${time} uygun`);
+                slotEl.setAttribute("aria-pressed", "false");
+            }
             slotEl.addEventListener("click", () => onSelect(slotEl, time));
         }
 
@@ -1106,6 +1114,45 @@ async function initCustomerPage() {
         dateInput.min = getToday();
     }
 
+    const dateChoices = document.getElementById("bookingDateChoices");
+    function renderBookingDateChoices() {
+        if (!dateChoices || !dateInput) return;
+        dateChoices.replaceChildren();
+        const [year, month, day] = getToday().split("-").map(Number);
+        for (let offset = 0; offset < 7; offset++) {
+            const date = new Date(year, month - 1, day + offset, 12);
+            const value = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "booking-date-choice";
+            button.setAttribute("aria-pressed", String(dateInput.value === value));
+            button.setAttribute("aria-label", date.toLocaleDateString("tr-TR", { weekday: "long", day: "numeric", month: "long" }));
+            const dayLabel = offset === 0 ? "Bugün" : offset === 1 ? "Yarın"
+                : date.toLocaleDateString("tr-TR", { weekday: "short" });
+            const monthLabel = date.toLocaleDateString("tr-TR", { month: "short" });
+            button.innerHTML = `<span>${dayLabel}</span><strong>${date.getDate()}</strong><span>${monthLabel}</span>`;
+            button.addEventListener("click", () => {
+                if (bookingInProgress || dateInput.value === value) return;
+                dateInput.value = value;
+                dateInput.dispatchEvent(new Event("change", { bubbles: true }));
+            });
+            dateChoices.appendChild(button);
+        }
+    }
+
+    function syncBookingSummary() {
+        const date = document.getElementById("bookingSummaryDate");
+        const time = document.getElementById("bookingSummaryTime");
+        const service = document.getElementById("bookingSummaryService");
+        if (date) date.textContent = dateInput?.value
+            ? new Date(`${dateInput.value}T12:00:00`).toLocaleDateString("tr-TR", { day: "numeric", month: "long" })
+            : "Tarih seçin";
+        if (time) time.textContent = selectedSlot || "Saat seçin";
+        if (service) service.textContent = document.getElementById("serviceSelect")?.value || "Hizmet seçin";
+    }
+    renderBookingDateChoices();
+    syncBookingSummary();
+
     function isValidTurkishPhone(raw) {
         const digits = raw.replace(/\D/g, "");
         if (/^(0?5\d{9})$/.test(digits)) return true;
@@ -1122,9 +1169,11 @@ async function initCustomerPage() {
             document.getElementById("customerPhone")?.parentNode.appendChild(errEl);
         }
         errEl.textContent = show ? "Geçerli bir Türk cep numarası girin (örn: 0555 123 45 67)" : "";
+        document.getElementById("customerPhone")?.setAttribute("aria-invalid", String(show));
     }
 
     function updateBookButton() {
+        if (typeof syncBookingSummary === "function") syncBookingSummary();
         const name = document.getElementById("customerName")?.value.trim() || "";
         const phone = document.getElementById("customerPhone")?.value.trim() || "";
         const service = document.getElementById("serviceSelect")?.value || "";
@@ -1139,8 +1188,12 @@ async function initCustomerPage() {
 
     function onSlotSelect(slotEl, time) {
         if (bookingInProgress) return;
-        document.querySelectorAll(".slot--selected").forEach(s => s.classList.remove("slot--selected"));
+        document.querySelectorAll("#slotsContainer .slot--selected").forEach(s => {
+            s.classList.remove("slot--selected");
+            s.setAttribute?.("aria-pressed", "false");
+        });
         slotEl.classList.add("slot--selected");
+        slotEl.setAttribute?.("aria-pressed", "true");
         selectedSlot = time;
         resetBookingIdempotencyKey();
         updateBookButton();
@@ -1197,6 +1250,7 @@ async function initCustomerPage() {
     
     if (dateInput) {
         dateInput.addEventListener("change", () => {
+            renderBookingDateChoices();
             selectedSlot = null;
             phoneDuplicateBlocked = false;
             resetBookingIdempotencyKey();
@@ -1330,6 +1384,8 @@ async function initCustomerPage() {
                         bookedEl.classList.remove("slot--selected", "slot--available");
                         bookedEl.classList.add("slot--booked");
                         bookedEl.title = "Dolu";
+                        bookedEl.disabled = true;
+                        bookedEl.setAttribute?.("aria-pressed", "false");
                         selectedEl.replaceWith(bookedEl);
                     }
                 }
