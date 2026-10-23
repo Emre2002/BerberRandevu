@@ -2,6 +2,30 @@
 const panel = document.getElementById("adminPanel");
 const navigation = document.getElementById("adminNavigation");
 const toggle = document.getElementById("adminMenuToggle");
+const dayToggle = document.getElementById("dayManagementToggle");
+const dayActions = document.getElementById("dayActions");
+if (dayToggle && dayActions) {
+    const setDayMenuOpen = open => {
+        dayToggle.setAttribute("aria-expanded", String(open));
+        dayActions.dataset.collapsed = String(!open);
+    };
+    setDayMenuOpen(false);
+    const syncDayAccess = () => {
+        dayToggle.hidden = dayActions.hidden;
+        if (dayActions.hidden) setDayMenuOpen(false);
+    };
+    syncDayAccess();
+    new MutationObserver(syncDayAccess).observe(dayActions, { attributes: true, attributeFilter: ["hidden"] });
+    dayToggle.addEventListener("click", () => {
+        if (!dayActions.hidden) setDayMenuOpen(dayToggle.getAttribute("aria-expanded") !== "true");
+    });
+    document.addEventListener("keydown", event => {
+        if (event.key === "Escape" && dayToggle.getAttribute("aria-expanded") === "true") {
+            setDayMenuOpen(false);
+            dayToggle.focus();
+        }
+    });
+}
 
 function setMenuOpen(open) {
     navigation.dataset.menuOpen = String(open);

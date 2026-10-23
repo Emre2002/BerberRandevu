@@ -60,6 +60,61 @@ it("admin shell, navigation, calendar keyboard actions and locks work at seven w
             await page.addScriptTag({ content: `${tabsSource}\ninitAdminTabs();` });
             await page.addScriptTag({ content: `let currentMonday = new Date(2026,9,19); function renderCalendar() { window.fixtureMonday = currentMonday.getDate(); } ${weekSource}` });
             await page.addScriptTag({ content: read("admin-dashboard.js") });
+            const daySource = app.slice(app.indexOf("    let dayActionPending = false;"), app.indexOf("    // Yalnızca bellekteki weekData'dan DOM çizer"));
+            await page.addScriptTag({ content: `{
+                const dayActions = document.getElementById("dayActions");
+                let calendarEnabled = true;
+                const dates = ["one", "two", "three", "four", "five", "six", "seven"];
+                const DAY_NAMES = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi", "Pazar"];
+                const weekData = { dayClosed: {} };
+                window.dayCalls = 0;
+                window.dayFailure = false;
+                async function blockDay(date) { window.dayCalls++; await new Promise(resolve => { window.finishDayRequest = resolve; }); if (window.dayFailure) throw new Error("fixture failure"); weekData.dayClosed[date] = true; }
+                async function unblockDay(date) { window.dayCalls++; weekData.dayClosed[date] = false; }
+                async function refreshDay() { renderDayActions(dates); }
+                function showToast(message, type) { window.dayToast = { message, type }; }
+                function firestoreErrorMessage() { return "fixture error"; }
+                ${daySource}
+                renderDayActions(dates);
+            }` });
+            assert.equal(await page.locator("#dayActions button").count(), 7);
+            if (width <= 768) {
+                assert.equal(await page.locator("#dayActions").isVisible(), false);
+                await page.locator("#dayManagementToggle").focus();
+                await page.keyboard.press("Enter");
+                assert.equal(await page.locator("#dayActions").isVisible(), true);
+                assert.equal(await page.locator("#dayManagementToggle").getAttribute("aria-expanded"), "true");
+                const positions = await page.evaluate(() => ({ actions: document.getElementById("dayActions").getBoundingClientRect().bottom, calendar: document.querySelector(".calendar-wrapper").getBoundingClientRect().top }));
+                assert.ok(positions.calendar >= positions.actions);
+                await page.keyboard.press("Escape");
+                assert.equal(await page.locator("#dayActions").isVisible(), false);
+                await page.locator("#dayManagementToggle").click();
+                await page.locator("#dayManagementToggle").click();
+                assert.equal(await page.locator("#dayActions").isVisible(), false);
+            } else {
+                assert.equal(await page.locator("#dayManagementToggle").isVisible(), false);
+                assert.equal(await page.locator("#dayActions").isVisible(), true);
+            }
+            if (width === 390) {
+                await page.locator("#dayManagementToggle").click();
+                await page.locator("#dayActions button").first().click();
+                await page.evaluate(() => document.querySelector("#dayActions button").click());
+                assert.equal(await page.evaluate(() => window.dayCalls), 1);
+                assert.equal(await page.locator("#dayActions button:disabled").count(), 7);
+                await page.evaluate(() => window.finishDayRequest());
+                await page.waitForFunction(() => document.getElementById("dayActions").getAttribute("aria-busy") === "false");
+                assert.match(await page.locator("#dayActions button").first().textContent(), /Günü Aç/);
+                await page.locator("#dayActions button").first().click();
+                await page.waitForFunction(() => window.dayCalls === 2);
+                assert.match(await page.locator("#dayActions button").first().textContent(), /Günü Kapat/);
+                await page.evaluate(() => { window.dayFailure = true; });
+                await page.locator("#dayActions button").first().click();
+                await page.evaluate(() => window.finishDayRequest());
+                await page.waitForFunction(() => window.dayToast?.type === "error");
+                assert.match(await page.locator("#dayActions button").first().textContent(), /Günü Kapat/);
+                assert.equal(await page.locator("#dayActions button:disabled").count(), 0);
+                await page.locator("#dayManagementToggle").click();
+            }
             if (width <= 1000) {
                 await page.locator("#adminMenuToggle").click();
                 assert.equal(await page.locator("#adminMenuToggle").getAttribute("aria-expanded"), "true");
@@ -99,6 +154,7 @@ it("admin shell, navigation, calendar keyboard actions and locks work at seven w
             if (width <= 1000) await page.locator("#adminMenuToggle").click();
             assert.equal(await page.locator('[data-tab="customers"]').isVisible(), false);
             assert.equal(await page.locator("#dayActions").isVisible(), false);
+            assert.equal(await page.locator("#dayManagementToggle").isVisible(), false);
             assert.equal(await page.locator('[data-panel="calendar"] .admin-header').isVisible(), false);
             await page.evaluate(() => {
                 document.getElementById("modalOverlay").classList.add("show");

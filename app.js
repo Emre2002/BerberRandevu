@@ -1539,6 +1539,8 @@ function initAdminPage() {
 
         if (customersTab) customersTab.hidden = !allowed;
         if (messagesTab) messagesTab.hidden = !allowed;
+        const dayManagement = document.getElementById("dayManagement");
+        if (dayManagement) dayManagement.hidden = !allowed;
 
         if (!allowed && calPanel) {
             if (dayActions) dayActions.hidden = true;
@@ -1946,17 +1948,24 @@ function initAdminPage() {
             showToast(firestoreErrorMessage(err), "error");
         }
     }
+    let dayActionPending = false;
     function renderDayActions(weekDates) {
         if (!dayActions) return;
         dayActions.innerHTML = "";
         weekDates.forEach((date, i) => {
             const btn = document.createElement("button");
+            btn.type = "button";
+            btn.disabled = dayActionPending || !calendarEnabled;
             btn.className = "btn btn-secondary btn-sm";
             const isClosed = weekData.dayClosed[date];
             btn.textContent = isClosed
                 ? `${DAY_NAMES[i]} — Günü Aç`
                 : `${DAY_NAMES[i]} — Günü Kapat`;
             btn.addEventListener("click", async () => {
+                if (dayActionPending || !calendarEnabled) return;
+                dayActionPending = true;
+                dayActions.setAttribute("aria-busy", "true");
+                dayActions.querySelectorAll("button").forEach(button => { button.disabled = true; });
                 try {
                     if (isClosed) {
                         await unblockDay(date);
@@ -1969,6 +1978,10 @@ function initAdminPage() {
                 } catch (err) {
                     console.error(err);
                     showToast(firestoreErrorMessage(err), "error");
+                } finally {
+                    dayActionPending = false;
+                    dayActions.setAttribute("aria-busy", "false");
+                    dayActions.querySelectorAll("button").forEach(button => { button.disabled = !calendarEnabled; });
                 }
             });
             dayActions.appendChild(btn);

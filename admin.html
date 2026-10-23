@@ -137,7 +137,10 @@
                 <span class="legend-item"><span class="legend-dot legend-dot--booked"></span> Dolu — tıkla: detay</span>
                 <span class="legend-item"><span class="legend-dot legend-dot--closed"></span> Kapalı — tıkla: aç</span>
             </div>
-            <div class="day-actions" id="dayActions"></div>
+            <div class="dashboard-day-management" id="dayManagement">
+                <button type="button" class="btn btn-secondary dashboard-day-toggle" id="dayManagementToggle" aria-expanded="false" aria-controls="dayActions" hidden>Günleri Yönet <span aria-hidden="true">⌄</span></button>
+                <div class="day-actions" id="dayActions"></div>
+            </div>
             <p class="dashboard-scroll-hint" id="calendarScrollHint">Diğer günleri görmek için takvimi yana kaydırın →</p>
             <div class="calendar-wrapper" tabindex="0" role="region" aria-label="Haftalık randevu takvimi" aria-describedby="calendarScrollHint">
                 <div class="calendar-grid" id="calendarGrid">
