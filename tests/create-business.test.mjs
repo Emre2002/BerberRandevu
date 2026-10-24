@@ -91,10 +91,10 @@ describe("Superadmin business provisioning", () => {
         const f = fixture();
         const { password: _unused, ...pendingInput } = input;
         f.documents.set("pendingBarbers/application-1", {
-            status: "processing", shopName: input.name, email: "applicant@example.test", phone: "5551234567"
+            status: "processing", approvalToken: "fixture-claim", shopName: input.name, email: "applicant@example.test", phone: "5551234567"
         });
         const result = await createBusiness({
-            ...f, timestamp: () => "now",
+            ...f, timestamp: () => "now", approvalToken: "fixture-claim",
             input: { ...pendingInput, email: "applicant@example.test", phone: "5551234567", pendingId: "application-1" }
         });
         assert.equal(f.authInputs[0].email, "applicant@example.test");
@@ -117,10 +117,10 @@ describe("Superadmin business provisioning", () => {
         const f = fixture({ failTransaction: true });
         const { password: _unused, ...pendingInput } = input;
         f.documents.set("pendingBarbers/application-1", {
-            status: "processing", shopName: input.name, email: "applicant@example.test", phone: "5551234567"
+            status: "processing", approvalToken: "fixture-claim", shopName: input.name, email: "applicant@example.test", phone: "5551234567"
         });
         await assert.rejects(createBusiness({
-            ...f, timestamp: () => "now",
+            ...f, timestamp: () => "now", approvalToken: "fixture-claim",
             input: { ...pendingInput, email: "applicant@example.test", phone: "5551234567", pendingId: "application-1" }
         }), (error) => error.code === "provisioning_incomplete" && !error.message.includes(input.password));
         assert.equal(f.documents.get("pendingBarbers/application-1").status, "processing");
@@ -162,10 +162,8 @@ describe("Superadmin business provisioning", () => {
     it("claims a pending application before creating a business, preventing duplicate approval", () => {
         const source = readFileSync(resolve("pendingBarberService.js"), "utf8");
         const approval = source.slice(source.indexOf("export async function approvePendingBarber"));
-        assert.ok(approval.indexOf("runTransaction(database") < approval.indexOf("await createBarber({"));
-        assert.match(approval, /data\.status !== "pending"/);
-        assert.match(approval, /status: "processing"/);
-        assert.doesNotMatch(approval, /createdPassword:\s*password/);
+        assert.match(approval, /callPrivilegedApi\("reviewApplication"/);
+        assert.doesNotMatch(source, /runTransaction|updateDoc|slugExists|usernameExists/);
         assert.doesNotMatch(source, /crypto\.getRandomValues|Math\.random|buildWhatsAppApprovalLink|generatePassword/);
         const core = readFileSync(resolve("api/_lib/create-business-core.js"), "utf8");
         assert.match(core, /randomBytes\(32\)/);

@@ -14,7 +14,8 @@ const API_ROUTE_MAP = {
     archiveOwnerAppointment: "/api/owner/archive-appointment",
     createOwnerAccount: "/api/create-owner-account",
     createBusinessForSuperAdmin: "/api/create-business",
-    updateOwnerSettings: "/api/owner/update-settings"
+    updateOwnerSettings: "/api/owner/update-settings",
+    reviewApplication: "/api/review-application"
 };
 
 export function shouldUsePrivilegedApi(ctx = {}) {

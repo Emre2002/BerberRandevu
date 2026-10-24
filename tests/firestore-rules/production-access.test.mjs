@@ -5,6 +5,7 @@ import { getFirestore } from "firebase-admin/firestore";
 import { getProductionRulesTestEnv, cleanupProductionRulesTestEnv, assertFails, assertSucceeds, RULES_TEST_PROJECT_ID } from "./env.mjs";
 import { seedRulesTestData, SHOP_A, SHOP_B, UID_OWNER_A, UID_OWNER_B, UID_NO_MEMBERSHIP, UID_DISABLED } from "./fixtures.mjs";
 import { updateOwnerSettings } from "../../api/_lib/owner-settings-core.js";
+import { reviewApplication } from "../../api/_lib/review-application-core.js";
 
 describe("production owner settings transaction and application access (local emulator only)", () => {
     let env, app, db;
@@ -22,6 +23,29 @@ describe("production owner settings transaction and application access (local em
     after(async () => { await cleanupProductionRulesTestEnv(); if (app) await deleteApp(app); });
     const input = updates => ({ uid: UID_OWNER_A, businessId: SHOP_A, updates });
     const snapshot = async path => (await db.doc(path).get()).data();
+
+    it("server approval claims a stored application once under concurrent requests", async () => {
+        await db.doc("pendingBarbers/application").update({ ownerName: "Fixture", shopName: "Fixture Shop", email: "fixture@example.test",
+            phone: "05551234567", city: "İzmir", district: "Konak", address: "Fixture", openingHour: "09:00", closingHour: "19:00" });
+        let authCalls = 0;
+        const auth = { createUser: async () => { authCalls++; return { uid: "application-owner" }; } };
+        const review = () => reviewApplication({ db, auth, timestamp: () => new Date(), applicationId: "application", action: "approve", reviewerUid: "superadmin-fixture" });
+        const results = await Promise.allSettled([review(), review()]);
+        assert.ok(results.some(result => result.status === "fulfilled"));
+        assert.equal(authCalls, 1);
+        assert.equal((await snapshot("pendingBarbers/application")).status, "approved");
+        assert.equal((await snapshot("businessMemberships/application-owner")).businessId, "fixture-shop");
+        assert.equal((await review()).idempotentReplay, true);
+        assert.equal(authCalls, 1);
+    });
+    it("server rejection preserves the application and safely replays", async () => {
+        const review = () => reviewApplication({ db, auth: {}, timestamp: () => new Date(), applicationId: "application", action: "reject", reviewerUid: "superadmin-fixture" });
+        await review();
+        const before = await snapshot("pendingBarbers/application");
+        assert.equal(before.status, "rejected");
+        assert.equal((await review()).idempotentReplay, true);
+        assert.deepEqual(await snapshot("pendingBarbers/application"), before);
+    });
 
     for (const updates of [{ selectedServices: ["Haircut", "Shave"] }, { openHour: "10:00", closeHour: "19:00" }]) {
         it(`updates own ${Object.keys(updates).join(", ")} and the public profile together`, async () => {

@@ -1,11 +1,8 @@
 import {
-    collection, addDoc, getDocs, doc, updateDoc, query, orderBy, serverTimestamp, runTransaction
+    collection, addDoc, getDocs, query, orderBy, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { db, hasFirebaseConfig } from "./firebase-config.js";
-import {
-    createBarber, normalizeSlug, slugExists, usernameExists
-} from "./firestoreService.js";
-import { getInitialTrialEndDate } from "./subscriptionService.js";
+import { callPrivilegedApi } from "./privilegedApiClient.js";
 
 const COLLECTION = "pendingBarbers";
 
@@ -21,40 +18,6 @@ function ensureDb() {
         throw new Error("Firebase yapılandırması eksik. Lütfen daha sonra tekrar deneyin.");
     }
     return db;
-}
-
-function subscriptionEndFromDays(days) {
-    const end = new Date();
-    end.setDate(end.getDate() + days - 1);
-    end.setHours(23, 59, 59, 999);
-    const y = end.getFullYear();
-    const m = String(end.getMonth() + 1).padStart(2, "0");
-    const d = String(end.getDate()).padStart(2, "0");
-    return `${y}-${m}-${d}`;
-}
-
-async function generateUniqueSlug(shopName) {
-    let base = normalizeSlug(shopName);
-    if (!base) base = "dukkan";
-    let slug = base;
-    let n = 2;
-    while (await slugExists(slug)) {
-        slug = `${base}-${n}`;
-        n++;
-    }
-    return slug;
-}
-
-async function generateUniqueUsername(slug) {
-    let base = slug.replace(/-/g, "");
-    if (!base) base = "berber";
-    let username = base;
-    let n = 2;
-    while (await usernameExists(username)) {
-        username = `${base}${n}`;
-        n++;
-    }
-    return username;
 }
 
 /** Ana sayfa dükkan başvuru formu. */
@@ -106,60 +69,13 @@ export async function fetchAllPendingBarbers() {
     return items;
 }
 
+/** Server checks the claim and performs the entire state transition. */
 export async function rejectPendingBarber(id) {
-    const database = ensureDb();
-    await updateDoc(doc(database, COLLECTION, id), {
-        status: "rejected",
-        rejectedAt: serverTimestamp()
-    });
+    return callPrivilegedApi("reviewApplication", { applicationId: id, action: "reject" });
 }
 
-/**
- * Onayla: pendingBarbers verisinden berberler koleksiyonunda otomatik dükkan oluşturur.
- * Slug ve kullanıcı adı otomatik üretilir. Auth başlangıç parolası yalnız sunucuda oluşturulur.
- */
 export async function approvePendingBarber(id) {
-    const database = ensureDb();
-    const pendingRef = doc(database, COLLECTION, id);
-    const p = await runTransaction(database, async (transaction) => {
-        const pendingSnap = await transaction.get(pendingRef);
-        if (!pendingSnap.exists()) throw new Error("Başvuru bulunamadı.");
-        const data = pendingSnap.data();
-        if (data.status !== "pending") {
-            throw new Error("Başvuru zaten işlendi veya kontrol bekliyor; tekrar oluşturulamaz.");
-        }
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(data.email || "").trim())) {
-            throw new Error("Başvurunun e-posta adresi geçersiz; hesap oluşturulamadı.");
-        }
-        transaction.update(pendingRef, { status: "processing", processingAt: serverTimestamp() });
-        return data;
-    });
-
-    const slug = await generateUniqueSlug(p.shopName);
-    const username = await generateUniqueUsername(slug);
-    // Paket tercihi ne olursa olsun başlangıçta yalnızca 1 günlük deneme erişimi.
-    const subscriptionEndDate = getInitialTrialEndDate();
-
-    const composedAddress = [p.city, p.district, p.address].filter(Boolean).join(", ");
-
-    await createBarber({
-        slug,
-        name: p.shopName,
-        city: p.city,
-        district: p.district,
-        addressDetail: p.address,
-        address: composedAddress,
-        phone: p.phone,
-        email: p.email,
-        whatsapp: p.phone.replace(/\D/g, "").replace(/^0/, "90"),
-        openHour: p.openingHour,
-        closeHour: p.closingHour,
-        mapsLink: p.mapsLink || "",
-        username,
-        pendingId: id,
-        subscriptionEndDate
-    });
-    return { slug, username, subscriptionEndDate };
+    return callPrivilegedApi("reviewApplication", { applicationId: id, action: "approve" });
 }
 
 export function formatPendingDate(ts) {

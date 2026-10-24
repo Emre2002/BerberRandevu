@@ -34,13 +34,13 @@ function subscriptionEndDate() {
     return date.toISOString().slice(0, 10);
 }
 
-export async function createBusiness({ db, auth, timestamp, input = {} }) {
+export async function createBusiness({ db, auth, timestamp, input = {}, approvalToken }) {
     const slug = normalizeSlug(requiredText(input.slug, "İşletme kimliği"));
     const name = requiredText(input.name, "İşletme adı");
     const validated = normalizeAndValidateUsername(input.username);
     const pendingId = optionalText(input.pendingId);
     if (pendingId && (pendingId.includes("/") || pendingId.length > 150
-        || Object.hasOwn(input, "password"))) {
+        || !approvalToken || Object.hasOwn(input, "password"))) {
         throw new CreateBusinessError("invalid_request", 400, "Başvuru isteği geçersiz.");
     }
     if (!slug || !validated.ok) {
@@ -73,9 +73,10 @@ export async function createBusiness({ db, auth, timestamp, input = {} }) {
         throw new CreateBusinessError("business_exists", 409, "İşletme veya kullanıcı adı zaten kullanılıyor.");
     }
     if (pendingRef && (!pendingApplication.exists || pendingApplication.data()?.status !== "processing"
-        || pendingApplication.data()?.shopName !== name
-        || pendingApplication.data()?.email !== optionalText(input.email)
-        || pendingApplication.data()?.phone !== optionalText(input.phone))) {
+        || pendingApplication.data()?.approvalToken !== approvalToken
+        || optionalText(pendingApplication.data()?.shopName) !== name
+        || optionalText(pendingApplication.data()?.email) !== optionalText(input.email)
+        || optionalText(pendingApplication.data()?.phone) !== optionalText(input.phone))) {
         throw new CreateBusinessError("pending_mismatch", 409, "Başvuru bilgileri uyuşmuyor.");
     }
 
@@ -124,8 +125,9 @@ export async function createBusiness({ db, auth, timestamp, input = {} }) {
                 throw new CreateBusinessError("business_exists", 409, "İşletme kayıtları çakışıyor.");
             }
             if (pendingRef && (!pending.exists || pending.data()?.status !== "processing"
-                || pending.data()?.shopName !== name || pending.data()?.email !== barber.email
-                || pending.data()?.phone !== barber.phone)) {
+                || pending.data()?.approvalToken !== approvalToken
+                || optionalText(pending.data()?.shopName) !== name || optionalText(pending.data()?.email) !== barber.email
+                || optionalText(pending.data()?.phone) !== barber.phone)) {
                 throw new CreateBusinessError("pending_mismatch", 409, "Başvuru bilgileri uyuşmuyor.");
             }
             tx.create(businessRef, barber);

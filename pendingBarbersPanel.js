@@ -10,6 +10,7 @@ import {
 let cache = [];
 let filter = { status: "pending", city: "all" };
 let showToastFn = () => {};
+const inFlight = new Set();
 
 function escapeHtml(str) {
     const d = document.createElement("div");
@@ -158,8 +159,14 @@ export function bindPendingBarbersEvents(showToast, onApproved) {
         const approveBtn = e.target.closest("[data-pb-approve]");
         const rejectBtn = e.target.closest("[data-pb-reject]");
 
+        const actionBtn = approveBtn || rejectBtn;
+        if (!actionBtn) return;
+        const applicationId = approveBtn?.dataset.pbApprove || rejectBtn?.dataset.pbReject;
+        if (inFlight.has(applicationId)) return;
+
         if (approveBtn) {
             const id = approveBtn.dataset.pbApprove;
+            inFlight.add(id);
             approveBtn.disabled = true;
             try {
                 const result = await approvePendingBarber(id);
@@ -174,12 +181,14 @@ export function bindPendingBarbersEvents(showToast, onApproved) {
                 showToastFn(err.message, "error");
                 await loadPendingBarbersPanel().catch(() => {});
             } finally {
+                inFlight.delete(id);
                 approveBtn.disabled = false;
             }
         }
 
         if (rejectBtn) {
             if (!confirm("Bu başvuruyu reddetmek istediğinize emin misiniz?")) return;
+            inFlight.add(applicationId);
             rejectBtn.disabled = true;
             try {
                 await rejectPendingBarber(rejectBtn.dataset.pbReject);
@@ -188,7 +197,9 @@ export function bindPendingBarbersEvents(showToast, onApproved) {
                 onApproved?.({ pendingCount: getPendingCount() });
             } catch (err) {
                 showToastFn(err.message, "error");
+                await loadPendingBarbersPanel().catch(() => {});
             } finally {
+                inFlight.delete(applicationId);
                 rejectBtn.disabled = false;
             }
         }
