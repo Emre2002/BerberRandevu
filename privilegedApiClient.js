@@ -13,7 +13,8 @@ const API_ROUTE_MAP = {
     createOwnerAppointment: "/api/owner/create-appointment",
     archiveOwnerAppointment: "/api/owner/archive-appointment",
     createOwnerAccount: "/api/create-owner-account",
-    createBusinessForSuperAdmin: "/api/create-business"
+    createBusinessForSuperAdmin: "/api/create-business",
+    updateOwnerSettings: "/api/owner/update-settings"
 };
 
 export function shouldUsePrivilegedApi(ctx = {}) {

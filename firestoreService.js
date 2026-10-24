@@ -58,27 +58,14 @@ export async function syncPublicBarber(slug, barberData) {
     }, { merge: true });
 }
 
-/** Owner paneli: yalnızca Rules tarafından izin verilen alanları public aynaya taşır. */
+/** Owner settings: the authenticated server transaction updates both records atomically. */
 export async function updateOwnerBarberSettings(slug, changes) {
     const allowed = new Set(["selectedServices", "openHour", "closeHour"]);
     if (!slug || !Object.keys(changes).length || Object.keys(changes).some((key) => !allowed.has(key))) {
         throw new Error("Geçersiz işletme ayarı.");
     }
 
-    const publicRef = doc(db, PUBLIC_BARBERS, slug);
-    const publicSnap = await getDoc(publicRef);
-    if (!publicSnap.exists() || publicSnap.data()?.slug !== slug) {
-        throw new Error("Müşteri profili bulunamadı; ayarlar kaydedilmedi.");
-    }
-
-    await updateDoc(doc(db, BARBERS, slug), changes);
-    try {
-        await updateDoc(publicRef, { ...changes, updatedAt: serverTimestamp() });
-    } catch {
-        const error = new Error("Ayarlar kaydedildi, ancak müşteri ekranına aktarılamadı. Lütfen tekrar deneyin.");
-        error.code = "public_mirror_sync_failed";
-        throw error;
-    }
+    return callPrivilegedApi("updateOwnerSettings", { businessId: slug, updates: changes });
 }
 
 /**

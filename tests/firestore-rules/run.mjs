@@ -13,6 +13,7 @@ const target = process.argv[2];
 
 const TEST_FILES = {
     config: resolve(__dirname, "config-path.test.mjs"),
+    access: resolve(__dirname, "production-access.test.mjs"),
     current: resolve(__dirname, "current-characterization.test.mjs"),
     target: resolve(__dirname, "target-requirements.test.mjs"),
     candidate: resolve(__dirname, "candidate", "candidate-security.test.mjs"),
@@ -21,6 +22,7 @@ const TEST_FILES = {
 
 const CONFIG_BY_TARGET = {
     config: null,
+    access: "firebase.rules-test.json",
     current: "firebase.rules-test.json",
     target: "firebase.rules-test.json",
     candidate: "firebase.rules-phase4b.json",
@@ -56,6 +58,8 @@ function buildSanitizedEnv(ports) {
         delete env[key];
     }
     env.RULES_TEST_SANITIZED = "1";
+    // The Java emulator's query evaluator must not depend on Turkish case folding.
+    env.JAVA_TOOL_OPTIONS = `${env.JAVA_TOOL_OPTIONS || ""} -Duser.language=en -Duser.country=US`.trim();
     if (ports) {
         env.FIRESTORE_EMULATOR_HOST = `127.0.0.1:${ports.firestore}`;
         env.FIREBASE_AUTH_EMULATOR_HOST = `127.0.0.1:${ports.auth}`;
