@@ -1,6 +1,5 @@
 import { getAuthInstance } from "./firebase-config.js";
 import { isLocalDevHost } from "./legacyAuthCompat.js";
-import { PRODUCTION_BASE_URL } from "./linkService.js";
 
 const API_ROUTE_MAP = {
     resolveAuthIdentifier: "/api/resolve-auth-identifier",
@@ -13,7 +12,10 @@ const API_ROUTE_MAP = {
     createAppointment: "/api/public/create-appointment",
     createOwnerAppointment: "/api/owner/create-appointment",
     archiveOwnerAppointment: "/api/owner/archive-appointment",
-    createOwnerAccount: "/api/create-owner-account"
+    createOwnerAccount: "/api/create-owner-account",
+    createBusinessForSuperAdmin: "/api/create-business",
+    updateOwnerSettings: "/api/owner/update-settings",
+    reviewApplication: "/api/review-application"
 };
 
 export function shouldUsePrivilegedApi(ctx = {}) {
@@ -34,11 +36,8 @@ export function shouldUsePrivilegedApi(ctx = {}) {
 }
 
 export function getPrivilegedApiBaseUrl() {
-    if (typeof window === "undefined") return PRODUCTION_BASE_URL;
-    if (isLocalDevHost(window.location.hostname)) {
-        return window.location.origin;
-    }
-    return PRODUCTION_BASE_URL;
+    if (typeof window === "undefined") return "";
+    return window.location.origin;
 }
 
 async function getAuthHeader(forceRefresh = false) {

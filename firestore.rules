@@ -7,6 +7,12 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function isSuperAdmin() {
+      return isSignedIn()
+        && request.auth.token.keys().hasAny(['superAdmin'])
+        && request.auth.token.superAdmin == true;
+    }
+
     function membershipPath() {
       return /databases/$(database)/documents/businessMemberships/$(request.auth.uid);
     }
@@ -145,7 +151,8 @@ service cloud.firestore {
 
     match /pendingBarbers/{pendingId} {
       allow create: if true;
-      allow get, list, update, delete: if false;
+      allow get, list: if isSuperAdmin();
+      allow update, delete: if false;
     }
 
     match /activationCodes/{codeId} {

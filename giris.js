@@ -2,6 +2,9 @@ import "./devEmulatorPage.js";
 import { bootstrapPassiveAuthFoundation } from "./authService.js";
 import { subscribeAuthorizedBusinessContext } from "./authorizedBusinessContext.js";
 import { withDevEmulatorQuery } from "./devEmulatorGate.js";
+import { getAuthInstance } from "./firebase-config.js";
+import { submitPasswordResetForm } from "./passwordResetCore.js";
+import { signInWithEmailOwnerAuth } from "./emailOwnerAuthLogin.js";
 import {
     shouldUseEmulatorAuthLogin,
     signInWithEmulatorAuth,
@@ -21,6 +24,27 @@ const LOGIN_ERROR = "Kullanıcı adı veya şifre hatalı.";
 const form = document.getElementById("girisForm");
 const errorEl = document.getElementById("girisError");
 const submitBtn = document.getElementById("girisSubmitBtn");
+const resetToggle = document.getElementById("openPasswordReset");
+const resetPanel = document.getElementById("passwordResetPanel");
+const resetForm = document.getElementById("passwordResetForm");
+
+resetToggle?.addEventListener("click", () => {
+    const visible = resetPanel.hidden;
+    resetPanel.hidden = !visible;
+    resetToggle.setAttribute("aria-expanded", String(visible));
+    if (visible) document.getElementById("resetEmail")?.focus();
+});
+
+resetForm?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    void submitPasswordResetForm(resetForm, async (email) => {
+        const auth = await getAuthInstance();
+        const { sendPasswordResetEmail } = await import(
+            "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js"
+        );
+        await sendPasswordResetEmail(auth, email);
+    });
+});
 
 function redirectAfterAuth(businessId) {
     const params = new URLSearchParams(window.location.search);
@@ -53,6 +77,11 @@ form?.addEventListener("submit", async (e) => {
     }
 
     try {
+        if (username.includes("@")) {
+            const { businessId } = await signInWithEmailOwnerAuth(username, password);
+            redirectAfterAuth(businessId);
+            return;
+        }
         if (shouldUseEmulatorAuthLogin()) {
             const { businessId } = await signInWithEmulatorAuth(username, password);
             redirectAfterAuth(businessId);

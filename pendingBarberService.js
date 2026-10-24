@@ -1,12 +1,8 @@
 import {
-    collection, addDoc, getDocs, getDoc, doc, updateDoc, query, orderBy, serverTimestamp
+    collection, addDoc, getDocs, query, orderBy, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 import { db, hasFirebaseConfig } from "./firebase-config.js";
-import {
-    createBarber, normalizeSlug, slugExists, usernameExists, getAdminLoginLink
-} from "./firestoreService.js";
-import { getAdminUrl } from "./linkService.js";
-import { getInitialTrialEndDate } from "./subscriptionService.js";
+import { callPrivilegedApi } from "./privilegedApiClient.js";
 
 const COLLECTION = "pendingBarbers";
 
@@ -22,49 +18,6 @@ function ensureDb() {
         throw new Error("Firebase yapılandırması eksik. Lütfen daha sonra tekrar deneyin.");
     }
     return db;
-}
-
-function subscriptionEndFromDays(days) {
-    const end = new Date();
-    end.setDate(end.getDate() + days - 1);
-    end.setHours(23, 59, 59, 999);
-    const y = end.getFullYear();
-    const m = String(end.getMonth() + 1).padStart(2, "0");
-    const d = String(end.getDate()).padStart(2, "0");
-    return `${y}-${m}-${d}`;
-}
-
-/** @deprecated Onay akışında getInitialTrialEndDate() kullanılır. */
-
-function generatePassword(len = 8) {
-    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
-    let pwd = "";
-    for (let i = 0; i < len; i++) pwd += chars[Math.floor(Math.random() * chars.length)];
-    return pwd;
-}
-
-async function generateUniqueSlug(shopName) {
-    let base = normalizeSlug(shopName);
-    if (!base) base = "dukkan";
-    let slug = base;
-    let n = 2;
-    while (await slugExists(slug)) {
-        slug = `${base}-${n}`;
-        n++;
-    }
-    return slug;
-}
-
-async function generateUniqueUsername(slug) {
-    let base = slug.replace(/-/g, "");
-    if (!base) base = "berber";
-    let username = base;
-    let n = 2;
-    while (await usernameExists(username)) {
-        username = `${base}${n}`;
-        n++;
-    }
-    return username;
 }
 
 /** Ana sayfa dükkan başvuru formu. */
@@ -109,68 +62,20 @@ export async function fetchAllPendingBarbers() {
         query(collection(database, COLLECTION), orderBy("createdAt", "desc"))
     );
     const items = [];
-    snap.forEach((d) => items.push({ id: d.id, ...d.data() }));
+    snap.forEach((d) => {
+        const { createdPassword: _legacyPassword, ...safeData } = d.data();
+        items.push({ id: d.id, ...safeData });
+    });
     return items;
 }
 
+/** Server checks the claim and performs the entire state transition. */
 export async function rejectPendingBarber(id) {
-    const database = ensureDb();
-    await updateDoc(doc(database, COLLECTION, id), {
-        status: "rejected",
-        rejectedAt: serverTimestamp()
-    });
+    return callPrivilegedApi("reviewApplication", { applicationId: id, action: "reject" });
 }
 
-/**
- * Onayla: pendingBarbers verisinden berberler koleksiyonunda otomatik dükkan oluşturur.
- * Slug, kullanıcı adı ve şifre otomatik üretilir.
- */
 export async function approvePendingBarber(id) {
-    const database = ensureDb();
-    const pendingRef = doc(database, COLLECTION, id);
-    const pendingSnap = await getDoc(pendingRef);
-
-    if (!pendingSnap.exists()) throw new Error("Başvuru bulunamadı.");
-
-    const p = pendingSnap.data();
-    if (p.status === "approved") throw new Error("Bu başvuru zaten onaylanmış.");
-    if (p.status === "rejected") throw new Error("Reddedilmiş başvuru onaylanamaz.");
-
-    const slug = await generateUniqueSlug(p.shopName);
-    const username = await generateUniqueUsername(slug);
-    const password = generatePassword(8);
-    // Paket tercihi ne olursa olsun başlangıçta yalnızca 1 günlük deneme erişimi.
-    const subscriptionEndDate = getInitialTrialEndDate();
-
-    const composedAddress = [p.city, p.district, p.address].filter(Boolean).join(", ");
-
-    await createBarber({
-        slug,
-        name: p.shopName,
-        city: p.city,
-        district: p.district,
-        addressDetail: p.address,
-        address: composedAddress,
-        phone: p.phone,
-        email: p.email,
-        whatsapp: p.phone.replace(/\D/g, "").replace(/^0/, "90"),
-        openHour: p.openingHour,
-        closeHour: p.closingHour,
-        mapsLink: p.mapsLink || "",
-        username,
-        password,
-        subscriptionEndDate
-    });
-
-    await updateDoc(pendingRef, {
-        status: "approved",
-        approvedAt: serverTimestamp(),
-        createdSlug: slug,
-        createdUsername: username,
-        createdPassword: password
-    });
-
-    return { slug, username, password, adminUrl: getAdminLoginLink(slug), subscriptionEndDate };
+    return callPrivilegedApi("reviewApplication", { applicationId: id, action: "approve" });
 }
 
 export function formatPendingDate(ts) {
@@ -184,16 +89,4 @@ export function formatPendingDate(ts) {
 
 export function packageLabel(type) {
     return PACKAGE_OPTIONS[type]?.label || type || "—";
-}
-
-export function buildWhatsAppApprovalLink(phone, { slug, username, password }) {
-    const digits = String(phone || "").replace(/\D/g, "");
-    let wa = digits;
-    if (wa.startsWith("0")) wa = "90" + wa.slice(1);
-    else if (!wa.startsWith("90")) wa = "90" + wa;
-
-    const adminUrl = getAdminUrl(slug) || "";
-    const text = `Merhaba.\n\nBerberRandevu başvurunuz onaylanmıştır.\n\nAdmin Panel:\n${adminUrl}\n\nKullanıcı Adınız:\n${username}\n\nŞifreniz:\n${password}`;
-
-    return `https://wa.me/${wa}?text=${encodeURIComponent(text)}`;
 }

@@ -25,6 +25,7 @@ export const PUBLIC_BOOKING_ERROR_MESSAGES = {
     slot_blocked: "Bu saat kısa süre önce doldu. Lütfen başka bir saat seçin.",
     day_closed: "Bu saat kısa süre önce doldu. Lütfen başka bir saat seçin.",
     duplicate_phone_day: "Bu telefon numarası ile bugün için zaten bir randevu bulunmaktadır. Gün içerisinde yalnızca 1 randevu oluşturabilirsiniz.",
+    booking_closed: "Bu işletme şu anda online randevu kabul etmiyor.",
 
     APPOINTMENT_IN_PAST: "Geçmiş bir tarih veya saate randevu oluşturulamaz.",
     appointment_in_past: "Geçmiş bir tarih veya saate randevu oluşturulamaz.",
@@ -67,7 +68,7 @@ const SLOT_CONFLICT_CODES = new Set([
 export function isPublicSlotConflictError(err) {
     const status = Number(err?.status);
     const code = String(err?.code || "").toLowerCase();
-    return status === 409 || SLOT_CONFLICT_CODES.has(code);
+    return code !== "duplicate_phone_day" && (status === 409 || SLOT_CONFLICT_CODES.has(code));
 }
 
 /**

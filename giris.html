@@ -87,8 +87,8 @@
 
             <form id="girisForm" autocomplete="off">
                 <div class="sa-form-group" style="margin-bottom:16px;">
-                    <label for="girisUsername">Kullanıcı Adı</label>
-                    <input type="text" id="girisUsername" placeholder="Kullanıcı adınız" required autocomplete="username">
+                    <label for="girisUsername">Kullanıcı Adı veya E-posta</label>
+                    <input type="text" id="girisUsername" placeholder="Kullanıcı adınız veya e-posta adresiniz" required autocomplete="username">
                 </div>
                 <div class="sa-form-group" style="margin-bottom:20px;">
                     <label for="girisPassword">Şifre</label>
@@ -97,7 +97,20 @@
                 <button type="submit" class="sa-btn sa-btn--primary" id="girisSubmitBtn" style="width:100%;min-height:44px;">Giriş Yap</button>
             </form>
 
+            <button type="button" class="giris-back" id="openPasswordReset" aria-expanded="false" aria-controls="passwordResetPanel" style="background:none;border:0;cursor:pointer;width:100%;">Şifremi Unuttum / Şifre Belirle</button>
+            <div id="passwordResetPanel" hidden>
+                <form id="passwordResetForm" autocomplete="off">
+                    <div class="sa-form-group" style="margin-bottom:16px;">
+                        <label for="resetEmail">Kayıtlı e-posta adresi</label>
+                        <input type="email" id="resetEmail" name="resetEmail" required autocomplete="email">
+                    </div>
+                    <p id="passwordResetStatus" data-reset-status role="status" aria-live="polite"></p>
+                    <button type="submit" class="sa-btn sa-btn--primary" style="width:100%;min-height:44px;">Şifre Belirleme Bağlantısı İste</button>
+                </form>
+            </div>
+
             <a href="index.html" class="giris-back">← Ana sayfaya dön</a>
+            <a href="super-admin.html" class="giris-back">Süperadmin girişi</a>
         </div>
     </div>
     <script type="module" src="giris.js"></script>

@@ -20,6 +20,8 @@ import {
 import { fetchAllCustomers, toDateSafe } from "./customerService.js";
 import { saveFirebaseConfig, hasFirebaseConfig } from "./firebase-config.js";
 import { isSuperAdminLoggedIn } from "./sessionAuth.js";
+import { shouldUseEmulatorAuthLogin } from "./legacyAuthCompat.js";
+import { bindPasswordChangeForm } from "./passwordChangeUI.js";
 
 /** Super Admin → dükkan paneli: aynı origin (localStorage oturumu paylaşılır). */
 function buildSuperAdminAdminPanelUrl(slug) {
@@ -44,7 +46,9 @@ import {
 } from "./activationCodesPanel.js";
 
 let barbersCache = [];
-let pendingBarbersCount = 0;
+let pendingBarbersCount = null;
+let barbersLoaded = false;
+let barbersLoadError = false;
 let panelMounted = false;
 let showToastFn = () => {};
 
@@ -266,6 +270,28 @@ function setupAddressSelector(prefix) {
 let createAddress = null;
 let editAddress = null;
 
+const dashboardIcons = {
+    overview: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
+    barbers: '<path d="M3 7h18v13H3zM8 7V4h8v3M3 12h18"/>',
+    codes: '<circle cx="8" cy="15" r="4"/><path d="m11 12 9-9 2 2-2 2-2-2-2 2 2 2-2 2"/>',
+    pending: '<path d="M4 4h16v16H4zM4 9h16M9 4v16"/>',
+    menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
+    plus: '<path d="M12 5v14M5 12h14"/>',
+    search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/>',
+    arrow: '<path d="M5 12h14m-6-6 6 6-6 6"/>',
+    pin: '<path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2"/>',
+    phone: '<path d="M7 3h3l1 4-2 2a15 15 0 0 0 6 6l2-2 4 1v3a3 3 0 0 1-3 3A15 15 0 0 1 4 6a3 3 0 0 1 3-3Z"/>',
+    calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 10h18"/>',
+    edit: '<path d="m4 20 4-.8L20 7l-3-3L4.8 16.2 4 20ZM15 6l3 3"/>',
+    copy: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>',
+    trash: '<path d="M4 7h16M9 7V4h6v3m3 0-1 13H7L6 7m4 4v6m4-6v6"/>',
+    alert: '<path d="m12 3 10 18H2L12 3Zm0 7v4m0 3h.01"/>',
+    sync: '<path d="M20 7v5h-5M4 17v-5h5M5.5 9A7 7 0 0 1 18 7l2 5M4 12l2 5a7 7 0 0 0 12.5-2"/>'
+};
+function dashboardIcon(name) {
+    return `<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${dashboardIcons[name]}</svg>`;
+}
+
 function getPanelHtml() {
     const firebaseSetup = hasFirebaseConfig() ? "" : `
         <section class="sa-card sa-card--warn" id="firebaseSetupCard">
@@ -287,39 +313,66 @@ function getPanelHtml() {
 
     return `
         <div id="saPanel" class="sa-panel" data-testid="super-admin-panel">
+            <button type="button" class="sa-sidebar-scrim" id="saSidebarScrim" aria-label="Menüyü kapat" tabindex="-1"></button>
+            <aside class="sa-sidebar" id="saSidebar" aria-label="Yönetim menüsü">
+                <div class="sa-brand"><span class="sa-brand__mark">B</span><span><strong>BerberRandevu</strong><small>Yönetim merkezi</small></span></div>
+                <div class="sa-sidebar__section-label">Çalışma alanı</div>
+                <nav class="sa-tabs" id="mainTabs" aria-label="Superadmin bölümleri">
+                    <button type="button" class="sa-tab active" data-tab="overview" aria-current="page">${dashboardIcon("overview")}<span>Genel Bakış</span></button>
+                    <button type="button" class="sa-tab" data-tab="barbers">${dashboardIcon("barbers")}<span>İşletmeler</span></button>
+                    <button type="button" class="sa-tab" data-tab="codes">${dashboardIcon("codes")}<span>Aktivasyon Kodları</span></button>
+                    <button type="button" class="sa-tab" data-tab="pending">${dashboardIcon("pending")}<span>Başvurular</span><span class="sa-tab-badge" id="pendingBarbersBadge" hidden>0</span></button>
+                </nav>
+                <div class="sa-sidebar__footer"><span class="sa-sidebar__status"></span> Superadmin alanı</div>
+            </aside>
+            <main class="sa-main" id="saMain">
             <header class="sa-header">
-                <h1 class="sa-header__title">Süper Admin <span class="sa-header__badge">SaaS</span></h1>
+                <div class="sa-header__heading">
+                    <button type="button" class="sa-menu-toggle" id="saSidebarToggle" aria-label="Menüyü aç" aria-controls="saSidebar" aria-expanded="false">${dashboardIcon("menu")}</button>
+                    <div><p class="sa-breadcrumb">BerberRandevu <span>/</span> Superadmin <span>/</span> <span id="saPageContext">Genel Bakış</span></p>
+                    <h1 class="sa-header__title" id="saPageTitle" tabindex="-1">Genel Bakış</h1></div>
+                </div>
                 <div class="sa-header__actions">
-                    <button type="button" class="sa-btn sa-btn--ghost" id="saSyncPublicBarbersBtn" title="berberler → publicBarbers mirror">
-                        🔄 Public Mirror Sync
-                    </button>
+                    <button type="button" class="sa-btn sa-btn--ghost" id="saSyncPublicBarbersBtn" title="İşletme profillerini publicBarbers ile eşitle">${dashboardIcon("sync")} Profil Senkronizasyonu</button>
                     <a href="index.html" class="sa-btn sa-btn--ghost">Ana Sayfa</a>
                     <button type="button" class="sa-logout" id="saLogoutBtn">Çıkış Yap</button>
                 </div>
             </header>
+            ${shouldUseEmulatorAuthLogin() ? "" : `<details class="sa-card" style="margin-bottom:20px;max-width:480px;">
+                <summary>Hesap şifresini değiştir</summary>
+                <form id="superAdminPasswordChangeForm" autocomplete="off" style="padding-top:12px;">
+                    <div class="sa-form-group"><label for="saCurrentPassword">Mevcut Şifre</label><input id="saCurrentPassword" name="currentPassword" type="password" required autocomplete="current-password"></div>
+                    <div class="sa-form-group"><label for="saNewPassword">Yeni Şifre</label><input id="saNewPassword" name="newPassword" type="password" required minlength="8" autocomplete="new-password"></div>
+                    <div class="sa-form-group"><label for="saConfirmPassword">Yeni Şifre (Tekrar)</label><input id="saConfirmPassword" name="confirmPassword" type="password" required minlength="8" autocomplete="new-password"></div>
+                    <p data-password-status role="status" aria-live="polite"></p>
+                    <button type="submit" class="sa-btn sa-btn--primary">Şifreyi Değiştir</button>
+                </form>
+            </details>`}
             ${firebaseSetup}
-            <div class="sa-stats sa-stats--dash" id="saStatCards" style="margin-bottom:24px;"></div>
-            <div id="saAlertZone" style="margin-bottom:24px;"></div>
-            <nav class="sa-tabs" id="mainTabs">
-                <button class="sa-tab active" data-tab="barbers">✂️ Dükkan Yönetimi</button>
-                <button class="sa-tab" data-tab="codes">🔑 Aktivasyon Kodları</button>
-                <button class="sa-tab" data-tab="pending">🏪 Bekleyen Dükkanlar <span class="sa-tab-badge" id="pendingBarbersBadge" hidden>0</span></button>
-            </nav>
-            <div class="sa-tab-panel" data-panel="barbers">
+            <div class="sa-tab-panel" data-panel="overview">
+                <div class="sa-section-heading"><div><p class="sa-eyebrow">İşletme görünümü</p><h2>Platform özeti</h2></div><span class="sa-section-heading__note">Güncel kayıtlar</span></div>
+                <div class="sa-stats sa-stats--dash" id="saStatCards" role="status" aria-live="polite"><div class="sa-data-state">Veriler yükleniyor…</div></div>
+                <p class="sa-metric-note">— işareti, bu ekranda yüklenmeyen bir metriği belirtir.</p>
+                <div id="saAlertZone" class="sa-alert-zone"></div>
+                <div class="sa-section-heading sa-section-heading--secondary"><div><p class="sa-eyebrow">Diğer göstergeler</p><h2>Operasyonel durum</h2></div></div>
+                <div class="sa-secondary-stats" id="saSecondaryStats"></div>
+            </div>
+            <div class="sa-tab-panel" data-panel="barbers" hidden>
                 <div class="sad-toolbar-head">
-                    <button type="button" class="sa-btn sa-btn--primary" id="openCreateBarberBtn">➕ Yeni Berber Ekle</button>
+                    <div><p class="sa-eyebrow">Yönetim</p><h2>İşletmeler</h2></div>
+                    <button type="button" class="sa-btn sa-btn--primary" id="openCreateBarberBtn">${dashboardIcon("plus")} Yeni İşletme Ekle</button>
                 </div>
                 <section class="sa-card">
                     <div class="sad-card-head">
-                        <h2 class="sa-card__title" style="margin:0;">📋 Dükkan Yönetimi</h2>
+                        <h2 class="sa-card__title" style="margin:0;">İşletme listesi</h2>
                         <span class="sad-result-count" id="sadResultCount"></span>
                     </div>
 
                     <div class="sad-toolbar-pro">
                         <div class="sad-toolbar-pro__row">
                             <div class="sad-search sad-search--pro">
-                                <span class="sad-search__icon">🔍</span>
-                                <input type="text" id="sadSearch" placeholder="Dükkan, telefon, şehir veya slug ara..." autocomplete="off">
+                                <span class="sad-search__icon">${dashboardIcon("search")}</span>
+                                <input type="search" id="sadSearch" aria-label="İşletme ara" placeholder="İşletme, telefon veya şehir ara..." autocomplete="off">
                             </div>
                             <label class="sad-select-all">
                                 <input type="checkbox" id="sadSelectAll" aria-label="Tümünü seç">
@@ -336,6 +389,7 @@ function getPanelHtml() {
                                 <div class="sad-chips sad-chips--toolbar" id="sadSubChips" data-group="sub"></div>
                             </div>
                         </div>
+                        <details class="sad-advanced"><summary>Gelişmiş filtreler</summary>
                         <div class="sad-toolbar-pro__row sad-toolbar-pro__row--meta">
                             <div class="sad-meta-filters">
                                 <div class="sad-loc sad-loc--compact">
@@ -357,18 +411,10 @@ function getPanelHtml() {
                                             <option value="subSoonest">Aboneliği En Yakın Bitecek</option>
                                             <option value="subLatest">Aboneliği En Geç Bitecek</option>
                                         </optgroup>
-                                        <optgroup label="Kullanım">
-                                            <option value="mostCustomers">En Çok Müşterisi Olan</option>
-                                            <option value="leastCustomers">En Az Müşterisi Olan</option>
-                                            <option value="mostAppointments">En Çok Randevusu Olan</option>
-                                            <option value="leastAppointments">En Az Randevusu Olan</option>
-                                            <option value="mostRevenue">En Çok Gelir Üreten</option>
-                                            <option value="leastRevenue">En Az Gelir Üreten</option>
-                                        </optgroup>
                                     </select>
                                 </div>
                             </div>
-                        </div>
+                        </div></details>
                     </div>
 
                     <div class="sad-filters sad-filters--legacy" id="sadFilters" hidden></div>
@@ -379,7 +425,6 @@ function getPanelHtml() {
                             <button type="button" class="sa-btn sa-btn--ghost" data-bulk="activate">🟢 Aktif Et</button>
                             <button type="button" class="sa-btn sa-btn--ghost" data-bulk="passive">🔴 Pasif Et</button>
                             <button type="button" class="sa-btn sa-btn--ghost" data-bulk="extend">📅 Abonelik Uzat</button>
-                            <button type="button" class="sa-btn sa-btn--ghost" data-bulk="message">💬 Mesaj Gönder</button>
                             <button type="button" class="sa-btn sa-btn--ghost" data-bulk="clear">✕ Temizle</button>
                         </div>
                     </div>
@@ -395,7 +440,7 @@ function getPanelHtml() {
                             <tbody id="barbersTableBody"></tbody>
                         </table>
                     </div>
-                    <div class="sad-cards sad-cards--grid" id="sadCards"></div>
+                    <div class="sad-cards sad-cards--grid" id="sadCards"><div class="sa-data-state">İşletmeler yükleniyor…</div></div>
                 </section>
             </div>
             <div class="sa-tab-panel" data-panel="codes" hidden>
@@ -404,11 +449,12 @@ function getPanelHtml() {
             <div class="sa-tab-panel" data-panel="pending" hidden>
                 ${getPendingBarbersPanelHtml()}
             </div>
+            </main>
         </div>
-        <div class="sa-modal-overlay" id="createBarberModal">
+        <div class="sa-modal-overlay" id="createBarberModal" role="dialog" aria-modal="true" aria-labelledby="createBarberTitle">
             <div class="sa-modal sa-modal--wide sa-modal--scroll">
                 <div class="sa-modal__head">
-                    <h3 class="sa-modal__title">➕ Yeni Berber Ekle</h3>
+                    <h3 class="sa-modal__title" id="createBarberTitle">Yeni İşletme Ekle</h3>
                     <button type="button" class="sa-modal__close" id="closeCreateBarberModal" aria-label="Kapat">×</button>
                 </div>
                 <form id="barberForm">
@@ -420,7 +466,7 @@ function getPanelHtml() {
                         <div class="sa-form-group"><label for="fieldOpenHour">Açılış Saati</label><input type="time" id="fieldOpenHour" value="09:00" required></div>
                         <div class="sa-form-group"><label for="fieldCloseHour">Kapanış Saati</label><input type="time" id="fieldCloseHour" value="21:00" required></div>
                         <div class="sa-form-group"><label for="fieldUsername">Kullanıcı Adı</label><input type="text" id="fieldUsername" required placeholder="elite_admin"></div>
-                        <div class="sa-form-group"><label for="fieldPassword">Şifre</label><input type="password" id="fieldPassword" required placeholder="••••••" minlength="4" autocomplete="new-password"></div>
+                        <div class="sa-form-group"><label for="fieldPassword">Şifre</label><input type="password" id="fieldPassword" required placeholder="••••••" minlength="6" autocomplete="new-password"></div>
                         <div class="sa-form-group"><label for="fieldTelegram">Telegram Chat ID</label><input type="text" id="fieldTelegram" placeholder="123456789"></div>
                         <div class="sa-form-group"><label for="fieldLogoUrl">Logo URL</label><input type="url" id="fieldLogoUrl" placeholder="https://..."></div>
                         <div class="sa-form-group"><label for="fieldCoverUrl">Kapak URL</label><input type="url" id="fieldCoverUrl" placeholder="https://..."></div>
@@ -455,9 +501,9 @@ function getPanelHtml() {
                 </form>
             </div>
         </div>
-        <div class="sa-modal-overlay" id="editModal">
+        <div class="sa-modal-overlay" id="editModal" role="dialog" aria-modal="true" aria-labelledby="editBarberTitle">
             <div class="sa-modal sa-modal--wide">
-                <h3 class="sa-modal__title">Berber Düzenle</h3>
+                <h3 class="sa-modal__title" id="editBarberTitle">Berber Düzenle</h3>
                 <form id="editForm">
                     <input type="hidden" id="editSlug">
                     <div class="sa-form-grid">
@@ -467,7 +513,6 @@ function getPanelHtml() {
                         <div class="sa-form-group"><label>Açılış</label><input type="time" id="editOpenHour" required></div>
                         <div class="sa-form-group"><label>Kapanış</label><input type="time" id="editCloseHour" required></div>
                         <div class="sa-form-group"><label>Kullanıcı Adı</label><input type="text" id="editUsername" required></div>
-                        <div class="sa-form-group"><label>Şifre</label><input type="password" id="editPassword" required autocomplete="new-password"></div>
                         <div class="sa-form-group"><label>Telegram Chat ID</label><input type="text" id="editTelegram"></div>
                         <div class="sa-form-group"><label>Logo URL</label><input type="url" id="editLogoUrl"></div>
                         <div class="sa-form-group"><label>Kapak URL</label><input type="url" id="editCoverUrl"></div>
@@ -660,7 +705,13 @@ function getDashView() {
 
 function renderStatCards() {
     const host = document.getElementById("saStatCards");
+    const secondary = document.getElementById("saSecondaryStats");
     if (!host) return;
+    if (!barbersLoaded) {
+        host.innerHTML = `<div class="sa-data-state ${barbersLoadError ? "sa-data-state--error" : ""}">${barbersLoadError ? "İşletme verileri yüklenemedi. Lütfen sayfayı yenileyin." : "Veriler yükleniyor…"}</div>`;
+        if (secondary) secondary.innerHTML = "";
+        return;
+    }
 
     const total = barbersCache.length;
     const active = barbersCache.filter((b) => (b.status || "active") === "active").length;
@@ -675,22 +726,22 @@ function renderStatCards() {
     const enriched = getEnrichedBarbers();
     const endingThisWeek = enriched.filter((b) => matchSub(b._sub, "7days")).length;
 
-    let totalCustomers = 0;
-    let totalAppointments = 0;
-    Object.values(statsBySlug).forEach((s) => {
-        totalCustomers += s.customers;
-        totalAppointments += s.appointments;
-    });
+    // Bu panel işletme istatistiklerini ayrı bir kaynaktan yüklemiyor; bilinmeyen sayıları sıfır gösterme.
+    const statsAvailable = barbersCache.length === 0 || barbersCache.every((b) => Object.hasOwn(statsBySlug, b.slug));
+    const totalCustomers = statsAvailable ? Object.values(statsBySlug).reduce((n, s) => n + (s.customers || 0), 0) : "—";
+    const totalAppointments = statsAvailable ? Object.values(statsBySlug).reduce((n, s) => n + (s.appointments || 0), 0) : "—";
 
     const cards = [
-        { label: "Toplam Dükkan", value: total, mod: "total" },
-        { label: "Aktif Dükkan", value: active, mod: "active" },
-        { label: "Pasif Dükkan", value: passive, mod: "passive" },
-        { label: "Bu Ay Yenilenen", value: renewedThisMonth, mod: "renewed" },
-        { label: "Bu Hafta Bitecek", value: endingThisWeek, mod: "expired" },
-        { label: "Toplam Müşteri", value: totalCustomers, mod: "appointments" },
-        { label: "Toplam Randevu", value: totalAppointments, mod: "revenue" },
-        { label: "Bekleyen Başvuru", value: pendingBarbersCount, mod: "passive", id: "statPendingBarbers" }
+        { label: "Toplam İşletme", value: total, mod: "total" },
+        { label: "Aktif İşletme", value: active, mod: "active" },
+        { label: "Toplam Randevu", value: totalAppointments, mod: "appointments" },
+        { label: "Bekleyen Başvuru", value: pendingBarbersCount ?? "—", mod: "pending", id: "statPendingBarbers" }
+    ];
+    const secondaryCards = [
+        { label: "Pasif İşletme", value: passive },
+        { label: "Bu Ay Yenilenen", value: renewedThisMonth },
+        { label: "Bu Hafta Bitecek", value: endingThisWeek },
+        { label: "Toplam Müşteri", value: totalCustomers }
     ];
 
     host.innerHTML = cards.map((c) => `
@@ -698,6 +749,8 @@ function renderStatCards() {
             <div class="sa-stat-card__label">${c.label}</div>
             <div class="sa-stat-card__value"${c.id ? ` id="${c.id}"` : ""}>${c.value}</div>
         </div>`).join("");
+    if (secondary) secondary.innerHTML = secondaryCards.map((c) => `
+        <div class="sa-secondary-stat"><span>${c.label}</span><strong>${c.value}</strong></div>`).join("");
 }
 
 function renderAlertZone() {
@@ -706,15 +759,16 @@ function renderAlertZone() {
     const soon = getEnrichedBarbers().filter((b) => matchSub(b._sub, "7days"));
     if (!soon.length) { host.innerHTML = ""; return; }
     host.innerHTML = `<button type="button" class="sad-alert" id="sadAlertBtn">
-        <span class="sad-alert__icon">⚠️</span>
+        <span class="sad-alert__icon">${dashboardIcon("alert")}</span>
         <span class="sad-alert__text"><strong>${soon.length} dükkanın</strong> aboneliği bu hafta sona eriyor. Listeyi görmek için tıklayın.</span>
-        <span class="sad-alert__arrow">→</span>
+        <span class="sad-alert__arrow">${dashboardIcon("arrow")}</span>
     </button>`;
     host.querySelector("#sadAlertBtn")?.addEventListener("click", () => {
         dashView.sub = "7days";
         renderDashChips();
         renderBarberTable();
-        document.getElementById("sadFilters")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        activatePanelTab("barbers");
+        document.getElementById("sadSubChips")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
     });
 }
 
@@ -816,16 +870,16 @@ function shopActionsBar(b) {
     const bookingUrl = escapeHtml(getBookingUrl(b.slug) || "#");
     const status = b.status || "active";
     const toggleLabel = status === "active" ? "Pasif Et" : "Aktif Et";
-    const toggleIcon = status === "active" ? "🔴" : "🟢";
+    const toggleIcon = dashboardIcon("overview");
     const slug = escapeHtml(b.slug);
 
     return `<div class="sad-act-bar">
-        <a href="${adminUrl}" target="_blank" rel="noopener noreferrer" class="sad-act-btn sad-act-btn--admin"><span aria-hidden="true">⚙️</span> Admin</a>
-        <a href="${bookingUrl}" target="_blank" rel="noopener noreferrer" class="sad-act-btn sad-act-btn--booking"><span aria-hidden="true">📅</span> Randevu</a>
-        <button type="button" class="sad-act-btn sad-act-btn--edit" data-action="edit" data-slug="${slug}"><span aria-hidden="true">✏️</span> Düzenle</button>
-        <button type="button" class="sad-act-btn sad-act-btn--copy" data-action="copy" data-slug="${slug}"><span aria-hidden="true">🔗</span> Kopyala</button>
-        <button type="button" class="sad-act-btn sad-act-btn--toggle" data-action="toggle" data-slug="${slug}" data-status="${status}"><span aria-hidden="true">${toggleIcon}</span> ${toggleLabel}</button>
-        <button type="button" class="sad-act-btn sad-act-btn--delete" data-action="delete" data-slug="${slug}"><span aria-hidden="true">🗑️</span> Sil</button>
+        <a href="${adminUrl}" target="_blank" rel="noopener noreferrer" class="sad-act-btn sad-act-btn--admin">${dashboardIcon("overview")} Admin</a>
+        <a href="${bookingUrl}" target="_blank" rel="noopener noreferrer" class="sad-act-btn sad-act-btn--booking">${dashboardIcon("calendar")} Randevu</a>
+        <button type="button" class="sad-act-btn sad-act-btn--edit" data-action="edit" data-slug="${slug}">${dashboardIcon("edit")} Düzenle</button>
+        <button type="button" class="sad-act-btn sad-act-btn--copy" data-action="copy" data-slug="${slug}">${dashboardIcon("copy")} Kopyala</button>
+        <button type="button" class="sad-act-btn sad-act-btn--toggle" data-action="toggle" data-slug="${slug}" data-status="${escapeHtml(status)}">${toggleIcon} ${toggleLabel}</button>
+        <button type="button" class="sad-act-btn sad-act-btn--delete" data-action="delete" data-slug="${slug}">${dashboardIcon("trash")} Sil</button>
     </div>`;
 }
 
@@ -837,7 +891,7 @@ function cardHtml(b) {
     return `<article class="sad-shop-card${selectedClass}" data-testid="business-card">
         <div class="sad-shop-card__top">
             <label class="sad-shop-card__check" title="Seç">
-                <input type="checkbox" class="sad-row-check sad-check-pro" data-check-slug="${b.slug}" ${checked}>
+                <input type="checkbox" class="sad-row-check sad-check-pro" data-check-slug="${escapeHtml(b.slug)}" aria-label="${escapeHtml(getBarberName(b))} seç" ${checked}>
             </label>
             ${shopAvatarHtml(b)}
             <div class="sad-shop-card__identity">
@@ -851,11 +905,11 @@ function cardHtml(b) {
         </div>
         <div class="sad-shop-card__body">
             <div class="sad-shop-card__col">
-                <div class="sad-meta-row"><span class="sad-meta-row__ico">📍</span><span>${escapeHtml(loc)}</span></div>
-                <div class="sad-meta-row"><span class="sad-meta-row__ico">📞</span><span>${escapeHtml(b.phone || "—")}</span></div>
+                <div class="sad-meta-row"><span class="sad-meta-row__ico">${dashboardIcon("pin")}</span><span>${escapeHtml(loc)}</span></div>
+                <div class="sad-meta-row"><span class="sad-meta-row__ico">${dashboardIcon("phone")}</span><span>${escapeHtml(b.phone || "—")}</span></div>
             </div>
             <div class="sad-shop-card__col">
-                <div class="sad-meta-row"><span class="sad-meta-row__ico">📅</span><span>${b.subscriptionEndDate ? formatDateTR(b.subscriptionEndDate) : "—"}</span></div>
+                <div class="sad-meta-row"><span class="sad-meta-row__ico">${dashboardIcon("calendar")}</span><span>${b.subscriptionEndDate ? formatDateTR(b.subscriptionEndDate) : "—"}</span></div>
                 <div class="sad-meta-row sad-meta-row--days">${remainingDaysHtml(b._sub)}</div>
             </div>
         </div>
@@ -881,7 +935,12 @@ function renderBarberTable() {
 
     if (!list.length) {
         const msg = barbersCache.length ? "Filtreye uygun dükkan bulunamadı." : "Henüz berber yok.";
-        cardsHost.innerHTML = `<div class="sad-empty-state">${msg}</div>`;
+        cardsHost.innerHTML = barbersCache.length
+            ? `<div class="sad-empty-state"><strong>${msg}</strong><p>Arama ve filtreleri değiştirerek tekrar deneyin.</p></div>`
+            : `<div class="sad-empty-state"><span class="sad-empty-state__icon">${dashboardIcon("barbers")}</span><strong>Henüz işletme yok</strong><p>İlk işletmenizi ekleyerek yönetmeye başlayın.</p><button type="button" class="sa-btn sa-btn--primary" id="sadEmptyCreateBtn">${dashboardIcon("plus")} Yeni İşletme Ekle</button></div>`;
+        document.getElementById("sadEmptyCreateBtn")?.addEventListener("click", openCreateBarberModal);
+        const selAll = document.getElementById("sadSelectAll");
+        if (selAll) selAll.checked = false;
         renderBulkBar();
         return;
     }
@@ -899,8 +958,8 @@ function updatePendingBarbersBadge(count) {
     const badge = document.getElementById("pendingBarbersBadge");
     const stat = document.getElementById("statPendingBarbers");
     if (badge) {
-        badge.textContent = count;
-        badge.hidden = count === 0;
+        badge.textContent = count ?? "—";
+        badge.hidden = count == null || count === 0;
     }
     if (stat) stat.textContent = count;
 }
@@ -913,6 +972,9 @@ async function loadPanelData() {
             const response = await listBusinessesForSuperAdminViaApi();
             barbersCache = Array.isArray(response?.businesses) ? response.businesses : [];
         } catch (err) {
+            barbersLoadError = true;
+            renderStatCards();
+            document.getElementById("sadCards").innerHTML = '<div class="sad-empty-state"><strong>İşletmeler yüklenemedi</strong><p>Lütfen sayfayı yenileyin.</p></div>';
             console.error("[SuperAdmin] list_businesses_failed", err?.code || err?.status || "unknown");
             if (err?.status === 403) {
                 throw Object.assign(new Error("super_admin_forbidden"), { code: "forbidden" });
@@ -926,6 +988,7 @@ async function loadPanelData() {
         barbersCache = await fetchAllBarbers();
     }
 
+    barbersLoaded = true;
     statsBySlug = {};
     refreshBarberStatsUI();
     try {
@@ -933,6 +996,7 @@ async function loadPanelData() {
         updatePendingBarbersBadge(pending);
     } catch (err) {
         console.warn("Bekleyen dükkanlar yüklenemedi:", err);
+        updatePendingBarbersBadge(null);
     }
 }
 
@@ -975,6 +1039,7 @@ function updateEditLinkTools(slug) {
 }
 
 function openEditModal(barber) {
+    lastModalTrigger = document.activeElement;
     document.getElementById("editSlug").value = barber.slug;
     document.getElementById("editName").value = barber.name || "";
     document.getElementById("editPhone").value = barber.phone || "";
@@ -989,7 +1054,7 @@ function openEditModal(barber) {
     document.getElementById("editOpenHour").value = barber.openHour || "09:00";
     document.getElementById("editCloseHour").value = barber.closeHour || "21:00";
     document.getElementById("editUsername").value = barber.username || "";
-    document.getElementById("editPassword").value = barber.password || "";
+    document.getElementById("editUsername").disabled = Boolean(barber.ownerUid);
     document.getElementById("editTelegram").value = barber.telegramChatId || "";
     document.getElementById("editLogoUrl").value = barber.logoUrl || "";
     document.getElementById("editCoverUrl").value = barber.coverUrl || "";
@@ -1001,6 +1066,7 @@ function openEditModal(barber) {
     updateEditLinkTools(barber.slug);
 
     document.getElementById("editModal").classList.add("open");
+    document.getElementById("editName")?.focus();
     // Popup açıkken arkadaki ana sayfanın kaymasını engelle
     document.body.style.overflow = "hidden";
 }
@@ -1009,6 +1075,7 @@ function closeEditModal() {
     document.getElementById("editModal")?.classList.remove("open");
     // Popup kapanınca ana sayfanın kaydırması normale dönsün
     document.body.style.overflow = "";
+    lastModalTrigger?.focus();
 }
 
 async function copyToClipboard(text, toastMessage = "Panoya kopyalandı!") {
@@ -1164,11 +1231,64 @@ function closeAllActionMenus() {
     });
 }
 
+let lastModalTrigger = null;
+let panelKeydownHandler = null;
+let panelResizeHandler = null;
+
+function syncSidebarAccessibility() {
+    const sidebar = document.getElementById("saSidebar");
+    const panel = document.getElementById("saPanel");
+    if (!sidebar || !panel || typeof window === "undefined") return;
+    const hidden = window.matchMedia("(max-width: 980px)").matches && !panel.classList.contains("is-sidebar-open");
+    sidebar.inert = hidden;
+    sidebar.setAttribute("aria-hidden", String(hidden));
+}
+
+function closeSidebar() {
+    document.getElementById("saPanel")?.classList.remove("is-sidebar-open");
+    const toggle = document.getElementById("saSidebarToggle");
+    toggle?.setAttribute("aria-expanded", "false");
+    toggle?.setAttribute("aria-label", "Menüyü aç");
+    syncSidebarAccessibility();
+}
+
+function toggleSidebar() {
+    const panel = document.getElementById("saPanel");
+    const toggle = document.getElementById("saSidebarToggle");
+    const open = panel.classList.toggle("is-sidebar-open");
+    toggle.setAttribute("aria-expanded", String(open));
+    toggle.setAttribute("aria-label", open ? "Menüyü kapat" : "Menüyü aç");
+    syncSidebarAccessibility();
+    if (open) document.querySelector("#mainTabs .sa-tab.active")?.focus();
+}
+
+function activatePanelTab(name) {
+    const titles = { overview: "Genel Bakış", barbers: "İşletmeler", codes: "Aktivasyon Kodları", pending: "Başvurular" };
+    if (!Object.hasOwn(titles, name)) return;
+    document.querySelectorAll("#mainTabs .sa-tab").forEach((tab) => {
+        const active = tab.dataset.tab === name;
+        tab.classList.toggle("active", active);
+        if (active) tab.setAttribute("aria-current", "page");
+        else tab.removeAttribute("aria-current");
+    });
+    document.querySelectorAll("#saPanel .sa-tab-panel").forEach((panel) => {
+        panel.hidden = panel.dataset.panel !== name;
+    });
+    document.getElementById("saPageTitle").textContent = titles[name];
+    document.getElementById("saPageContext").textContent = titles[name];
+    const wasSidebarOpen = document.getElementById("saPanel")?.classList.contains("is-sidebar-open");
+    closeSidebar();
+    if (wasSidebarOpen) document.getElementById("saPageTitle")?.focus?.();
+    if (name === "codes") loadActivationCodesPanel();
+}
+
 function openCreateBarberModal() {
     const modal = document.getElementById("createBarberModal");
     if (!modal) return;
+    lastModalTrigger = document.activeElement;
     modal.classList.add("open");
     document.body.style.overflow = "hidden";
+    document.getElementById("fieldName")?.focus();
 }
 
 function closeCreateBarberModal() {
@@ -1176,6 +1296,7 @@ function closeCreateBarberModal() {
     if (!modal) return;
     modal.classList.remove("open");
     document.body.style.overflow = "";
+    lastModalTrigger?.focus();
 }
 
 function bindPanelEvents(onLogout) {
@@ -1186,15 +1307,33 @@ function bindPanelEvents(onLogout) {
     createAddress = setupAddressSelector("create");
     editAddress = setupAddressSelector("edit");
 
-    document.querySelectorAll(".sa-tab").forEach(tab => {
-        tab.addEventListener("click", () => {
-            document.querySelectorAll(".sa-tab").forEach(t => t.classList.remove("active"));
-            document.querySelectorAll(".sa-tab-panel").forEach(p => p.hidden = true);
-            tab.classList.add("active");
-            document.querySelector(`[data-panel="${tab.dataset.tab}"]`).hidden = false;
-            if (tab.dataset.tab === "codes") loadActivationCodesPanel();
-        });
+    document.querySelectorAll("#mainTabs .sa-tab").forEach((tab) => {
+        tab.addEventListener("click", () => activatePanelTab(tab.dataset.tab));
     });
+    document.getElementById("saSidebarToggle")?.addEventListener("click", toggleSidebar);
+    document.getElementById("saSidebarScrim")?.addEventListener("click", closeSidebar);
+    panelResizeHandler = syncSidebarAccessibility;
+    window.addEventListener("resize", panelResizeHandler);
+    syncSidebarAccessibility();
+    panelKeydownHandler = (event) => {
+        const modal = document.querySelector(".sa-modal-overlay.open");
+        if (event.key === "Escape") {
+            if (modal?.id === "createBarberModal") closeCreateBarberModal();
+            else if (modal?.id === "editModal") closeEditModal();
+            else if (document.getElementById("saPanel")?.classList.contains("is-sidebar-open")) {
+                closeSidebar();
+                document.getElementById("saSidebarToggle")?.focus();
+            }
+        }
+        if (event.key === "Tab" && modal) {
+            const focusables = [...modal.querySelectorAll('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href]')].filter((node) => node.getClientRects().length);
+            if (!focusables.length) return;
+            const first = focusables[0], last = focusables.at(-1);
+            if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+            else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+        }
+    };
+    document.addEventListener("keydown", panelKeydownHandler);
 
     bindActivationCodesEvents(showToastFn);
     bindPendingBarbersEvents(showToastFn, (payload) => {
@@ -1293,11 +1432,15 @@ function bindPanelEvents(onLogout) {
             createAddress?.reset();
             closeCreateBarberModal();
             showToastFn("Berber başarıyla oluşturuldu.");
-            // Tüm listeyi tekrar çekmek yerine yalnızca yeni kaydı oku ve cache'e ekle.
-            const newBarber = await fetchBarber(created.slug);
-            if (newBarber) {
-                barbersCache.push(newBarber);
-                sortBarbersCache();
+            // Liste okuması başarısız olsa bile tamamlanan oluşturma işlemini hata sayma.
+            try {
+                const newBarber = await fetchBarber(created.slug);
+                if (newBarber) {
+                    barbersCache.push(newBarber);
+                    sortBarbersCache();
+                }
+            } catch {
+                showToastFn("İşletme oluşturuldu; listeyi yenileyin.");
             }
             refreshBarberStatsUI();
         } catch (err) {
@@ -1368,8 +1511,6 @@ function bindPanelEvents(onLogout) {
                 whatsapp: document.getElementById("editWhatsapp").value,
                 openHour: document.getElementById("editOpenHour").value,
                 closeHour: document.getElementById("editCloseHour").value,
-                username: document.getElementById("editUsername").value,
-                password: document.getElementById("editPassword").value,
                 telegramChatId: document.getElementById("editTelegram").value,
                 logoUrl: document.getElementById("editLogoUrl").value,
                 coverUrl: document.getElementById("editCoverUrl").value,
@@ -1379,6 +1520,9 @@ function bindPanelEvents(onLogout) {
                 subscriptionStatus,
                 lastSubscriptionUpdate: serverTimestamp()
             };
+            if (!document.getElementById("editUsername").disabled) {
+                updates.username = document.getElementById("editUsername").value;
+            }
             await superAdminUpdateBarber(slug, updates);
             const cached = barbersCache.find(b => b.slug === slug);
             if (cached) {
@@ -1479,13 +1623,25 @@ export async function mountSuperAdminPanel(mountEl, { showToast, onLogout }) {
     showToastFn = showToast;
     mountEl.innerHTML = getPanelHtml();
     bindPanelEvents(onLogout);
+    bindPasswordChangeForm(document.getElementById("superAdminPasswordChangeForm"));
     panelMounted = true;
-    await loadPanelData();
+    try {
+        await loadPanelData();
+    } catch (err) {
+        if (err?.code === "forbidden") throw err;
+        showToastFn("İşletme verileri yüklenemedi. Lütfen sayfayı yenileyin.", "error");
+    }
 }
 
 export function unmountSuperAdminPanel(mountEl) {
     if (mountEl) mountEl.innerHTML = "";
     panelMounted = false;
     barbersCache = [];
-    pendingBarbersCount = 0;
+    pendingBarbersCount = null;
+    barbersLoaded = false;
+    barbersLoadError = false;
+    if (panelKeydownHandler) document.removeEventListener("keydown", panelKeydownHandler);
+    panelKeydownHandler = null;
+    if (panelResizeHandler) window.removeEventListener("resize", panelResizeHandler);
+    panelResizeHandler = null;
 }

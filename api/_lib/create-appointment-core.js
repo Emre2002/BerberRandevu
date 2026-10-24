@@ -36,6 +36,7 @@ export const BOOKING_HTTP_MESSAGES = {
     business_not_found: "İşletme bilgileri bulunamadı.",
     slot_unavailable: "Bu saat kısa süre önce doldu. Lütfen başka bir saat seçin.",
     duplicate_phone_day: "Bu telefon numarası ile bugün için zaten bir randevu bulunmaktadır. Gün içerisinde yalnızca 1 randevu oluşturabilirsiniz.",
+    booking_closed: "Bu işletme şu anda online randevu kabul etmiyor.",
     appointment_in_past: "Geçmiş bir tarih veya saate randevu oluşturulamaz.",
     invalid_request: "Lütfen randevu bilgilerini kontrol edin.",
     invalid_phone: "Telefon numarası geçerli değil.",
@@ -227,6 +228,10 @@ async function createNotification(db, { businessId, customerName, phone, date, t
 }
 
 async function maybeSendTelegram(db, { businessId, customerName, phone, date, time }) {
+    // Explicit server-side opt-in; keep disabled until Telegram is requested again.
+    // Return before any private business lookup or bot credential access.
+    if (process.env.TELEGRAM_NOTIFICATIONS_ENABLED !== "true") return;
+
     const barberSnap = await db.collection("berberler").doc(businessId).get();
     const chatId = barberSnap.exists ? barberSnap.data()?.telegramChatId : null;
     if (!chatId) return;
@@ -245,29 +250,42 @@ async function maybeSendTelegram(db, { businessId, customerName, phone, date, ti
 }
 
 async function runBestEffortSideEffects(db, payload) {
-    try {
-        await upsertCustomerOnAppointment(db, payload);
-    } catch (err) {
-        console.warn("[create-appointment] customer upsert failed:", err?.code || "internal");
+    const timings = {};
+    const measure = async (name, operation) => {
+        const startedAt = Date.now();
+        try { await operation(); }
+        finally { timings[name] = Date.now() - startedAt; }
+    };
+    // These write separate collections and depend only on the committed payload.
+    // Await both even if one fails; their durations overlap, so do not sum them.
+    const [customerResult, notificationResult] = await Promise.allSettled([
+        measure("customerUpsertMs", () => upsertCustomerOnAppointment(db, payload)),
+        measure("notificationMs", () => createNotification(db, payload))
+    ]);
+    if (customerResult.status === "rejected") {
+        console.warn("[create-appointment] customer upsert failed:", customerResult.reason?.code || "internal");
+    }
+    if (notificationResult.status === "rejected") {
+        console.warn("[create-appointment] notification failed:", notificationResult.reason?.code || "internal");
     }
 
-    try {
-        await createNotification(db, payload);
-    } catch (err) {
-        console.warn("[create-appointment] notification failed:", err?.code || "internal");
-    }
-
+    const startedAt = Date.now();
     try {
         await maybeSendTelegram(db, payload);
     } catch (err) {
         console.warn("[create-appointment] telegram failed:", err?.code || "internal");
+    } finally {
+        timings.telegramMs = Date.now() - startedAt;
     }
+    return { timings, notificationCreated: notificationResult.status === "fulfilled" };
 }
 
 /**
  * @param {import('firebase-admin/firestore').Firestore} db
  */
 export async function createPublicAppointment(db, input, { clientIp = "unknown", ownerContext = false } = {}) {
+    const coreStartedAt = Date.now();
+    const rateLimitTimings = { businessIpBurstMs: 0, bookingAttemptMs: 0 };
     const rawSlug = String(input.dukkan || input.shop || input.barberSlug || input.businessId || "").trim();
     const customerName = cleanDisplayName(input.customerName);
     const phoneRaw = String(input.phone || "").trim();
@@ -298,7 +316,9 @@ export async function createPublicAppointment(db, input, { clientIp = "unknown",
     }
 
     if (!ownerContext) {
+        const startedAt = Date.now();
         await enforceCreateIpBusinessBurstLimit(db, businessId, clientIp);
+        rateLimitTimings.businessIpBurstMs = Date.now() - startedAt;
     }
 
     const idempotencyDocId = idempotencyKey ? hashIdempotencyKey(idempotencyKey) : null;
@@ -316,7 +336,8 @@ export async function createPublicAppointment(db, input, { clientIp = "unknown",
                     date: String(idemData.date || date),
                     time: normalizeTimeHHmm(String(idemData.time || time)),
                     status: "confirmed",
-                    idempotentReplay: true
+                    idempotentReplay: true,
+                    timings: { ...rateLimitTimings, validationRateLimitMs: Date.now() - coreStartedAt, transactionMs: 0 }
                 };
             }
         }
@@ -368,7 +389,9 @@ export async function createPublicAppointment(db, input, { clientIp = "unknown",
     const displayPhone = phoneOptional ? "—" : phoneRaw.replace(/\s/g, "");
 
     if (!ownerContext) {
+        const startedAt = Date.now();
         await enforceBookingAttemptLimit(db, businessId, normalizedPhone);
+        rateLimitTimings.bookingAttemptMs = Date.now() - startedAt;
     }
 
     const publicSnap = await db.collection("publicBarbers").doc(businessId).get();
@@ -425,6 +448,8 @@ export async function createPublicAppointment(db, input, { clientIp = "unknown",
         : null;
 
     let committedAppointmentId = appointmentRef.id;
+    const validationRateLimitMs = Date.now() - coreStartedAt;
+    const transactionStartedAt = Date.now();
 
     try {
         const txnResult = await db.runTransaction(async (tx) => {
@@ -579,7 +604,8 @@ export async function createPublicAppointment(db, input, { clientIp = "unknown",
                 date,
                 time,
                 status: "confirmed",
-                idempotentReplay: true
+                idempotentReplay: true,
+                timings: { ...rateLimitTimings, validationRateLimitMs, transactionMs: Date.now() - transactionStartedAt }
             };
         }
 
@@ -591,7 +617,9 @@ export async function createPublicAppointment(db, input, { clientIp = "unknown",
         throw wrapped;
     }
 
-    await runBestEffortSideEffects(db, {
+    const transactionMs = Date.now() - transactionStartedAt;
+    const sideEffectsStartedAt = Date.now();
+    const { timings: sideEffectTimings, notificationCreated } = await runBestEffortSideEffects(db, {
         businessId,
         customerName,
         phone: displayPhone,
@@ -607,7 +635,14 @@ export async function createPublicAppointment(db, input, { clientIp = "unknown",
         date,
         time,
         status: "confirmed",
-        notificationQueued: !ownerContext
+        notificationQueued: notificationCreated,
+        timings: {
+            ...rateLimitTimings,
+            validationRateLimitMs,
+            transactionMs,
+            sideEffectsMs: Date.now() - sideEffectsStartedAt,
+            ...sideEffectTimings
+        }
     };
 }
 
@@ -644,6 +679,9 @@ export function mapBookingErrorToHttp(err, { requestId = null } = {}) {
     if (code === "duplicate_phone_day") {
         return { status: 409, body: buildErrorBody("duplicate_phone_day", requestId) };
     }
+    if (code === "booking_closed") {
+        return { status: 400, body: buildErrorBody("booking_closed", requestId) };
+    }
     if (
         code === "slot_taken"
         || code === "slot_blocked"
@@ -664,7 +702,6 @@ export function mapBookingErrorToHttp(err, { requestId = null } = {}) {
         code === "invalid_request"
         || code === "invalid_slot"
         || code === "shop_passive"
-        || code === "booking_closed"
         || code === "spam_detected"
     ) {
         return { status: 400, body: buildErrorBody("invalid_request", requestId) };

@@ -3,7 +3,7 @@ const SUPER_ADMIN_FIELDS = [
     "phone", "whatsapp", "email", "openHour", "closeHour", "logoUrl", "coverUrl",
     "mapsLink", "status", "subscriptionStatus", "subscriptionEndDate", "username",
     "telegramChatId", "selectedServices", "createdAt", "updatedAt", "subscriptionRenewedAt",
-    "lastActivationCode", "lastSubscriptionUpdate"
+    "lastActivationCode", "lastSubscriptionUpdate", "ownerUid"
 ];
 
 export function sanitizeBusinessForSuperAdmin(slug, data = {}) {

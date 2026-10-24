@@ -19,6 +19,7 @@ import {
 import { getCustomerBlockMessage, calculatePublicBookingOpen } from "./publicBookingAccess.js";
 import { normalizeUsername as canonicalNormalizeUsername } from "./usernameNormalization.js";
 import { buildPublicBarberProjection } from "./publicBarberProjection.js";
+import { callPrivilegedApi } from "./privilegedApiClient.js";
 
 const BARBERS = "berberler";
 const PUBLIC_BARBERS = "publicBarbers";
@@ -55,6 +56,16 @@ export async function syncPublicBarber(slug, barberData) {
         ...publicData,
         updatedAt: serverTimestamp()
     }, { merge: true });
+}
+
+/** Owner settings: the authenticated server transaction updates both records atomically. */
+export async function updateOwnerBarberSettings(slug, changes) {
+    const allowed = new Set(["selectedServices", "openHour", "closeHour"]);
+    if (!slug || !Object.keys(changes).length || Object.keys(changes).some((key) => !allowed.has(key))) {
+        throw new Error("Geçersiz işletme ayarı.");
+    }
+
+    return callPrivilegedApi("updateOwnerSettings", { businessId: slug, updates: changes });
 }
 
 /**
@@ -178,15 +189,7 @@ export async function validateBarberLogin(slug, username, password) {
     return barber;
 }
 
-function defaultSubscriptionEndDate(months = 1) {
-    const d = new Date();
-    d.setMonth(d.getMonth() + months);
-    return d.toISOString().split("T")[0];
-}
-
-/**
- * Yeni berber oluşturur (kullanıcı adı + şifre Firestore'da saklanır).
- */
+/** Yeni işletmeyi yalnızca yetkili sunucu akışı üzerinden oluşturur. */
 export async function createBarber({
     slug,
     name,
@@ -206,55 +209,15 @@ export async function createBarber({
     telegramChatId = "",
     mapsLink = "",
     email = "",
+    pendingId = "",
     subscriptionEndDate: customSubscriptionEndDate = null
 }) {
-    const normalizedSlug = normalizeSlug(slug);
-    const normalizedUsername = normalizeUsername(username);
-
-    if (!normalizedSlug) throw new Error("Geçerli bir slug giriniz.");
-    if (!normalizedUsername) throw new Error("Kullanıcı adı zorunludur.");
-    if (!password || password.length < 4) throw new Error("Şifre en az 4 karakter olmalıdır.");
-
-    if (await slugExists(normalizedSlug)) {
-        throw new Error("Bu slug zaten kullanılıyor.");
-    }
-    if (await usernameExists(normalizedUsername)) {
-        throw new Error("Bu kullanıcı adı zaten kullanılıyor.");
-    }
-
-    const subscriptionEndDate = customSubscriptionEndDate || defaultSubscriptionEndDate(1);
-
-    const barberPayload = {
-        name: name.trim(),
-        slug: normalizedSlug,
-        address: address.trim(),
-        city: city.trim(),
-        district: district.trim(),
-        neighborhood: neighborhood.trim(),
-        addressDetail: addressDetail.trim(),
-        phone: phone.trim(),
-        email: (email || "").trim(),
-        whatsapp: whatsapp.trim(),
-        openHour,
-        closeHour,
-        username: normalizedUsername,
-        password,
-        logoUrl: logoUrl.trim(),
-        coverUrl: coverUrl.trim(),
-        telegramChatId: telegramChatId.trim(),
-        mapsLink: mapsLink.trim(),
-        status: "active",
-        subscriptionStatus: "active",
-        subscriptionEndDate,
-        lastActivationCode: "",
-        lastSubscriptionUpdate: null,
-        createdAt: serverTimestamp()
-    };
-
-    await setDoc(doc(db, BARBERS, normalizedSlug), barberPayload);
-    await syncPublicBarber(normalizedSlug, barberPayload);
-
-    return { slug: normalizedSlug, username: normalizedUsername };
+    return callPrivilegedApi("createBusinessForSuperAdmin", {
+        slug, name, address, city, district, neighborhood, addressDetail,
+        phone, whatsapp, openHour, closeHour, username, password,
+        logoUrl, coverUrl, telegramChatId, mapsLink, email,
+        subscriptionEndDate: customSubscriptionEndDate, pendingId
+    });
 }
 
 export async function updateBarber(slug, data, currentSlug = slug) {
@@ -262,7 +225,7 @@ export async function updateBarber(slug, data, currentSlug = slug) {
         "name", "address", "city", "district", "neighborhood", "addressDetail",
         "phone", "whatsapp", "openHour", "closeHour", "email",
         "logoUrl", "coverUrl", "telegramChatId", "mapsLink", "status", "subscriptionStatus", "subscriptionEndDate",
-        "username", "password", "lastActivationCode", "lastSubscriptionUpdate"
+        "username", "lastActivationCode", "lastSubscriptionUpdate"
     ];
     const payload = {};
 
