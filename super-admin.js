@@ -8,7 +8,7 @@ import {
 } from "./sessionAuth.js";
 import { validateSuperAdminLogin } from "./superAdminAuth.js";
 import {
-    signInWithProductionSuperAdminAuth,
+    signInWithSuperAdminEmailAuth,
     PRODUCTION_SUPER_ADMIN_LOGIN_ERROR,
     PRODUCTION_SUPER_ADMIN_FORBIDDEN_ERROR,
     PRODUCTION_SUPER_ADMIN_UNAVAILABLE_ERROR
@@ -95,11 +95,11 @@ loginForm?.addEventListener("submit", async (e) => {
     loginBtn.textContent = "Doğrulanıyor...";
 
     try {
-        const username = document.getElementById("saUsername").value;
+        const identifier = document.getElementById("saUsername").value;
         const password = document.getElementById("saPassword").value;
 
         if (shouldUseEmulatorAuthLogin()) {
-            const valid = await validateSuperAdminLogin(username, password);
+            const valid = await validateSuperAdminLogin(identifier, password);
             if (!valid) {
                 loginError?.classList.add("show");
                 return;
@@ -109,16 +109,18 @@ loginForm?.addEventListener("submit", async (e) => {
             return;
         }
 
-        await signInWithProductionSuperAdminAuth(username, password);
+        await signInWithSuperAdminEmailAuth(identifier, password);
         loginSuperAdmin();
         await showPanel();
     } catch (err) {
-        if (err?.message === "production_super_admin_missing_claim") {
+        if (err?.message === "super_admin_missing_claim") {
             loginError.textContent = PRODUCTION_SUPER_ADMIN_FORBIDDEN_ERROR;
         } else if (
-            err?.message === "production_super_admin_invalid_response" ||
+            err?.message === "super_admin_invalid_credentials" ||
             err?.code === "auth/wrong-password" ||
             err?.code === "auth/invalid-credential" ||
+            err?.code === "auth/invalid-email" ||
+            err?.code === "auth/user-not-found" ||
             err?.code === "auth_failed"
         ) {
             loginError.textContent = PRODUCTION_SUPER_ADMIN_LOGIN_ERROR;

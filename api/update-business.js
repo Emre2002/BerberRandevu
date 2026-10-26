@@ -9,7 +9,7 @@ const ALLOWED_UPDATE_FIELDS = new Set([
     "name", "address", "city", "district", "neighborhood", "addressDetail",
     "phone", "whatsapp", "email", "openHour", "closeHour", "logoUrl", "coverUrl",
     "mapsLink", "status", "subscriptionStatus", "subscriptionEndDate", "username",
-    "telegramChatId", "selectedServices", "password"
+    "telegramChatId", "selectedServices"
 ]);
 
 function buildPublicProjection(barber, slug) {
@@ -125,6 +125,11 @@ export default async function handler(req, res) {
             return;
         }
 
+        if (Object.hasOwn(body.updates || body, "password")) {
+            sendError(res, 400, "password_update_not_allowed", "Şifre yalnızca hesap ayarlarından değiştirilebilir.");
+            return;
+        }
+
         const updates = {};
         for (const [key, value] of Object.entries(body.updates || body)) {
             if (!ALLOWED_UPDATE_FIELDS.has(key)) continue;
@@ -134,6 +139,14 @@ export default async function handler(req, res) {
         if (!Object.keys(updates).length) {
             sendError(res, 400, "invalid_request", "No valid fields to update.");
             return;
+        }
+
+        if (Object.hasOwn(updates, "username")) {
+            const existing = await ref.get();
+            if (existing.data()?.ownerUid) {
+                sendError(res, 409, "auth_identity_locked", "Authentication kullanıcı adı ve şifresi bu işlemle değiştirilemez.");
+                return;
+            }
         }
 
         updates.updatedAt = FieldValue.serverTimestamp();

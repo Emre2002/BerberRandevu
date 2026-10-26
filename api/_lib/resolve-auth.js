@@ -137,6 +137,10 @@ export async function resolveAuthIdentifier(rawUsername, opts = {}) {
     const indexSnap = await db.collection("authLoginIndex").doc(validated.normalized).get();
 
     if (indexSnap.exists) {
+        // Bu endpoint anonimdir; gerçek başvuru e-postasını kullanıcı adına karşılık döndürme.
+        if (indexSnap.data()?.loginMode === "email") {
+            return { ok: false, code: GENERIC_AUTH_ERROR };
+        }
         const fromIndex = resolveFromIndexDoc(indexSnap.data() || {}, opts);
         if (fromIndex.ok) {
             return fromIndex;

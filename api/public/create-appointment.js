@@ -25,6 +25,7 @@ export default async function handler(req, res) {
     }
 
     const ip = getClientIp(req);
+    const burstStartedAt = Date.now();
 
     try {
         const db = getAdminDb();
@@ -62,15 +63,21 @@ export default async function handler(req, res) {
         sendJson(res, 500, { ok: false, code: "internal_error", requestId }, { "X-Request-Id": requestId });
         return;
     }
+    const burstLimitMs = Date.now() - burstStartedAt;
 
     try {
+        const parseStartedAt = Date.now();
         const body = await readJsonBody(req);
+        const bodyParseMs = Date.now() - parseStartedAt;
         const db = getAdminDb();
         const createStarted = Date.now();
         const result = await createPublicAppointment(db, body, { clientIp: ip });
         const createMs = Date.now() - createStarted;
         console.info("[public/create-appointment]", {
             requestId,
+            burstLimitMs,
+            bodyParseMs,
+            ...result.timings,
             createMs,
             totalMs: Date.now() - startedAt,
             idempotentReplay: Boolean(result.idempotentReplay)

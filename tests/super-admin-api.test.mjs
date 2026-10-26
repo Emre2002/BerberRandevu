@@ -16,7 +16,7 @@ describe("super-admin privileged API wiring", () => {
 
     it("super-admin.js requires Firebase Auth session with superAdmin claim", () => {
         const src = readFileSync(resolve(ROOT, "super-admin.js"), "utf8");
-        assert.match(src, /signInWithProductionSuperAdminAuth/);
+        assert.match(src, /signInWithSuperAdminEmailAuth/);
         assert.match(src, /getIdTokenResult\(true\)/);
         assert.match(src, /Panel verileri yüklenemedi/);
         assert.doesNotMatch(src, /FirebaseError/);

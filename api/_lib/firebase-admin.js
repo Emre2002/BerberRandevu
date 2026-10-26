@@ -1,8 +1,8 @@
 import { initializeApp, getApps, cert, applicationDefault } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
+import { resolveExpectedProjectId, validateServiceAccountProjectId } from "./firebase-project-policy.js";
 
-const DEFAULT_PROJECT_ID = "berberrandevu-20a3e";
 
 function normalizePrivateKey(serviceAccount) {
     if (serviceAccount?.private_key && typeof serviceAccount.private_key === "string") {
@@ -31,22 +31,32 @@ function mapAdminError(err) {
 }
 
 export function getAdminApp() {
+    const expectedProjectId = resolveExpectedProjectId();
     if (getApps().length) {
-        return getApps()[0];
+        const existingApp = getApps()[0];
+        if (existingApp.options.projectId !== expectedProjectId) {
+            throw new Error("firebase_admin_existing_app_project_mismatch");
+        }
+        return existingApp;
     }
 
     const serviceAccount = readServiceAccountJson();
     if (serviceAccount) {
+        validateServiceAccountProjectId(serviceAccount, expectedProjectId);
         return initializeApp({
             credential: cert(serviceAccount),
-            projectId: serviceAccount.project_id || DEFAULT_PROJECT_ID
+            projectId: expectedProjectId
         });
+    }
+
+    if (process.env.VERCEL_ENV === "preview") {
+        throw new Error("firebase_admin_credentials_missing");
     }
 
     try {
         return initializeApp({
             credential: applicationDefault(),
-            projectId: process.env.FIREBASE_PROJECT_ID || DEFAULT_PROJECT_ID
+            projectId: expectedProjectId
         });
     } catch (err) {
         throw mapAdminError(err);

@@ -2,6 +2,7 @@ import "./devEmulatorPage.js";
 import { authSignOut, bootstrapPassiveAuthFoundation } from "./authService.js";
 import { AUTH_GUARD_STATE } from "./authGuard.js";
 import { subscribeAuthorizedBusinessContext } from "./authorizedBusinessContext.js";
+import { bindPasswordChangeForm } from "./passwordChangeUI.js";
 
 const urlSlug = new URLSearchParams(window.location.search).get("dukkan")
     || new URLSearchParams(window.location.search).get("shop");
@@ -74,5 +75,7 @@ document.getElementById("btnLogout")?.addEventListener("click", async () => {
     }
     redirectToLogin();
 });
+
+bindPasswordChangeForm(document.getElementById("ownerPasswordChangeForm"));
 
 initGate();

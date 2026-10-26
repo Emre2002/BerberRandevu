@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
     <link rel="alternate icon" href="favicon.ico">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Yönetim Paneli | Berber</title>
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="super-admin.css">
@@ -42,8 +42,12 @@
         .sa-mode-bar__btn { padding:8px 14px; border-radius:var(--radius-sm); background:rgba(99,102,241,0.18); border:1px solid rgba(99,102,241,0.5); color:#c7d2fe; font-size:0.8125rem; font-weight:600; text-decoration:none; white-space:nowrap; transition:background .2s ease; }
         .sa-mode-bar__btn:hover { background:rgba(99,102,241,0.32); }
     </style>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="admin-dashboard.css">
 </head>
-<body>
+<body class="admin-dashboard">
     <div id="barberLoginGate" class="bl-page">
         <div class="bl-card">
             <div class="bl-icon">✂️</div>
@@ -77,12 +81,13 @@
     <div id="liveNotificationCenter"></div>
 
     <div id="adminPanel" class="app app--admin" hidden>
-        <div class="admin-topbar">
-            <h1 class="admin-title">Berber Yönetim Paneli</h1>
+        <header class="admin-topbar">
+            <div class="dashboard-heading"><p class="dashboard-eyebrow">İŞLETME YÖNETİMİ</p><h1 class="admin-title" id="adminSectionTitle">Takvim</h1><p class="dashboard-business" id="adminBusinessName">Berber Yönetim Paneli</p></div>
             <div class="admin-topbar__actions">
+                <button type="button" class="dashboard-menu-toggle" id="adminMenuToggle" aria-expanded="false" aria-controls="adminNavigation">☰ <span>Menü</span></button>
                 <button type="button" class="admin-logout" id="btnLogout">Çıkış Yap</button>
             </div>
-        </div>
+        </header>
 
         <div class="sub-topbar" id="adminSubTopbar" hidden>
             <div class="sub-topbar__grid">
@@ -104,17 +109,22 @@
 
         <div class="sub-lock-banner" id="adminSubLockBanner" hidden></div>
 
-        <div class="admin-tabs">
-            <button type="button" class="admin-tab active" data-tab="calendar">📅 Takvim</button>
-            <button type="button" class="admin-tab" data-tab="customers">👥 Müşteriler</button>
-            <button type="button" class="admin-tab" data-tab="messages">💬 Müşterilere Mesaj Gönder</button>
-            <button type="button" class="admin-tab" data-tab="hours">🕐 Çalışma Saatleri</button>
-            <button type="button" class="admin-tab" data-tab="services">✂️ Hizmetler</button>
-            <button type="button" class="admin-tab" data-tab="deleted">🗑️ Silinen Randevular</button>
-            <button type="button" class="admin-tab" data-tab="subscription">🔑 Abonelik</button>
-        </div>
+        <nav class="admin-tabs" id="adminNavigation" aria-label="Yönetim bölümleri">
+            <a class="dashboard-brand" href="#adminSectionTitle"><span class="dashboard-brand__mark" aria-hidden="true">✂</span><span>BerberRandevu<small>İŞİNİZİN KONTROL MERKEZİ</small></span></a>
+            <p class="dashboard-nav-label">ÇALIŞMA ALANINIZ</p>
+            <button type="button" class="admin-tab active" data-tab="calendar"><span class="dashboard-nav-icon" aria-hidden="true">▦</span> Takvim</button>
+            <button type="button" class="admin-tab" data-tab="customers"><span class="dashboard-nav-icon" aria-hidden="true">♙</span> Müşteriler</button>
+            <button type="button" class="admin-tab" data-tab="messages"><span class="dashboard-nav-icon" aria-hidden="true">▤</span> Mesajlar</button>
+            <button type="button" class="admin-tab" data-tab="hours"><span class="dashboard-nav-icon" aria-hidden="true">◷</span> Çalışma Saatleri</button>
+            <button type="button" class="admin-tab" data-tab="services"><span class="dashboard-nav-icon" aria-hidden="true">✂</span> Hizmetler</button>
+            <button type="button" class="admin-tab" data-tab="deleted"><span class="dashboard-nav-icon" aria-hidden="true">▱</span> Silinen Randevular</button>
+            <button type="button" class="admin-tab" data-tab="subscription"><span class="dashboard-nav-icon" aria-hidden="true">◇</span> Abonelik</button>
+            <button type="button" class="admin-tab" data-tab="account"><span class="dashboard-nav-icon" aria-hidden="true">◎</span> Hesap</button>
+            <p class="dashboard-nav-footer">Planlayın. Yönetin.<br>İşinize odaklanın.</p>
+        </nav>
 
         <div class="admin-tab-panel" data-panel="calendar">
+            <div class="dashboard-calendar-intro"><div><p class="dashboard-eyebrow">RANDEVU PLANI</p><h2>Haftanıza genel bakış</h2></div><span class="dashboard-calendar-note">Tüm saatler İstanbul saatine göredir.</span></div>
             <div class="admin-header">
                 <div class="admin-nav">
                     <button class="btn btn-secondary btn-sm" id="btnPrevWeek">← Önceki</button>
@@ -127,8 +137,12 @@
                 <span class="legend-item"><span class="legend-dot legend-dot--booked"></span> Dolu — tıkla: detay</span>
                 <span class="legend-item"><span class="legend-dot legend-dot--closed"></span> Kapalı — tıkla: aç</span>
             </div>
-            <div class="day-actions" id="dayActions"></div>
-            <div class="calendar-wrapper">
+            <div class="dashboard-day-management" id="dayManagement">
+                <button type="button" class="btn btn-secondary dashboard-day-toggle" id="dayManagementToggle" aria-expanded="false" aria-controls="dayActions" hidden>Günleri Yönet <span aria-hidden="true">⌄</span></button>
+                <div class="day-actions" id="dayActions"></div>
+            </div>
+            <p class="dashboard-scroll-hint" id="calendarScrollHint">Diğer günleri görmek için takvimi yana kaydırın →</p>
+            <div class="calendar-wrapper" tabindex="0" role="region" aria-label="Haftalık randevu takvimi" aria-describedby="calendarScrollHint">
                 <div class="calendar-grid" id="calendarGrid">
                     <div class="slots-loading">Takvim yükleniyor...</div>
                 </div>
@@ -136,13 +150,14 @@
         </div>
 
         <div class="admin-tab-panel" data-panel="customers" hidden>
+            <div class="dashboard-module-heading"><p class="dashboard-eyebrow">MÜŞTERİ İLİŞKİLERİ</p><h2>Müşterilerinizi yakından tanıyın</h2><p>Arayın, filtreleyin ve ziyaret geçmişini inceleyin.</p></div>
             <div class="crm">
                 <div class="crm-stats" id="crmStats"></div>
 
                 <div class="crm-toolbar">
                     <div class="crm-search">
                         <span class="crm-search__icon">🔍</span>
-                        <input type="text" id="crmSearch" placeholder="Ad, soyad veya telefon ara..." autocomplete="off">
+                        <input type="text" id="crmSearch" aria-label="Müşteri adı veya telefon ile ara" placeholder="Ad, soyad veya telefon ara..." autocomplete="off">
                     </div>
                     <div class="crm-filters" id="crmFilters"></div>
                 </div>
@@ -170,11 +185,12 @@
         </div>
 
         <div class="admin-tab-panel" data-panel="messages" hidden>
-            <section class="section msg-panel">
-                <div class="sa-card" style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:24px;">
+            <div class="dashboard-module-heading"><p class="dashboard-eyebrow">İLETİŞİM</p><h2>Müşterilerinizle iletişimde kalın</h2><p>Şablon seçin, metninizi kontrol edin ve gönderin.</p></div>
+            <section class="msg-panel dashboard-messages">
+                <div class="dashboard-module-card">
                     <h2 class="section-title">Toplu Mesaj Gönder</h2>
                     <p style="color:var(--text-muted);font-size:0.875rem;margin-bottom:16px;">
-                        Kayıtlı müşteri sayısı: <strong id="barberCustomerCount">0</strong>
+                        Kayıtlı müşteri sayısı: <strong id="barberCustomerCount">—</strong>
                     </p>
                     <div class="form-group">
                         <label for="barberTemplateSelect">Mesaj Şablonu</label>
@@ -185,12 +201,12 @@
                         <textarea id="barberCustomMessage" rows="3" placeholder="Şablon yerine özel metin yazabilirsiniz..." style="width:100%;padding:12px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;color:var(--text-primary);font-family:inherit;resize:vertical;"></textarea>
                     </div>
                     <div class="form-group" style="margin-top:12px;">
-                        <label>Önizleme</label>
-                        <div class="msg-preview" id="barberMessagePreview">—</div>
+                        <label id="messagePreviewLabel">Önizleme</label>
+                        <div class="msg-preview" id="barberMessagePreview" aria-labelledby="messagePreviewLabel" aria-live="polite">—</div>
                     </div>
                     <button type="button" class="btn btn-primary" id="barberSendCampaignBtn" style="margin-top:16px;">Mesajı Gönder</button>
                 </div>
-                <div class="sa-card" style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:24px;">
+                <div class="dashboard-module-card">
                     <h2 class="section-title">Mesaj Geçmişi</h2>
                     <div class="msg-history" id="barberCampaignHistory"></div>
                 </div>
@@ -198,6 +214,7 @@
         </div>
 
         <div class="admin-tab-panel" data-panel="hours" hidden>
+            <div class="dashboard-module-heading"><p class="dashboard-eyebrow">İŞLETME DÜZENİ</p><h2>Çalışma gününüzü planlayın</h2><p>Randevuya açık saatleri tek yerden yönetin.</p></div>
             <section class="wh-panel">
                 <div class="wh-card">
                     <h2 class="wh-card__title">Çalışma Saatleri</h2>
@@ -217,7 +234,7 @@
                     </div>
                     <div class="wh-preview">
                         <span class="wh-preview__label">Oluşturulacak slotlar (1 saatlik)</span>
-                        <div class="wh-preview__chips" id="whSlotPreview"></div>
+                        <div class="wh-preview__chips" id="whSlotPreview" aria-live="polite"></div>
                     </div>
                     <button type="button" class="btn btn-primary" id="whSaveBtn">Çalışma Saatlerini Güncelle</button>
                 </div>
@@ -225,6 +242,7 @@
         </div>
 
         <div class="admin-tab-panel" data-panel="services" hidden>
+            <div class="dashboard-module-heading"><p class="dashboard-eyebrow">HİZMET KATALOĞU</p><h2>Uzmanlığınızı müşterilerinize sunun</h2><p>Randevu ekranında görünecek hizmetleri belirleyin.</p></div>
             <section class="svc-panel">
                 <div class="svc-card-wrap">
                     <h2 class="svc-card-wrap__title">Hizmetler</h2>
@@ -234,7 +252,7 @@
                     <div class="svc-toolbar">
                         <div class="svc-search">
                             <span class="svc-search__icon">🔍</span>
-                            <input type="search" id="svcSearch" placeholder="Hizmet adı ara..." autocomplete="off">
+                            <input type="search" id="svcSearch" aria-label="Hizmet adı ara" placeholder="Hizmet adı ara..." autocomplete="off">
                         </div>
                         <div class="svc-toolbar__actions">
                             <button type="button" class="btn btn-secondary btn-sm" id="svcSelectAll">Tümünü Seç</button>
@@ -243,7 +261,7 @@
                     </div>
                     <div class="svc-grid" id="svcGrid"></div>
                     <div class="svc-meta">
-                        <p class="svc-count" id="svcCount">0 hizmet seçili</p>
+                        <p class="svc-count" id="svcCount" aria-live="polite">Hizmetler yükleniyor…</p>
                     </div>
                     <button type="button" class="btn btn-primary" id="svcSaveBtn">Hizmetleri Kaydet</button>
                 </div>
@@ -251,16 +269,17 @@
         </div>
 
         <div class="admin-tab-panel" data-panel="deleted" hidden>
+            <div class="dashboard-module-heading"><p class="dashboard-eyebrow">RANDEVU ARŞİVİ</p><h2>Geçmiş işlemleriniz, düzenli bir arşivde</h2></div>
             <section class="da-panel">
                 <div class="da-panel__header">
                     <div>
                         <h2 class="da-panel__title">Silinen Randevular Arşivi</h2>
                         <p class="da-panel__hint">Silinen randevular 7 gün boyunca burada görünür, ardından listeden kalkar.</p>
                     </div>
-                    <span class="da-panel__count"><span id="daCount">0</span> kayıt</span>
+                    <span class="da-panel__count"><span id="daCount">—</span> kayıt</span>
                 </div>
-                <div class="da-loading" id="daLoading" hidden>Yükleniyor...</div>
-                <div class="da-empty" id="daEmpty" hidden></div>
+                <div class="da-loading" id="daLoading" role="status" hidden>Arşiv yükleniyor...</div>
+                <div class="da-empty" id="daEmpty" role="status" hidden></div>
                 <div class="da-table-wrap">
                     <table class="da-table">
                         <thead>
@@ -283,10 +302,11 @@
         </div>
 
         <div class="admin-tab-panel" data-panel="subscription" hidden>
+            <div class="dashboard-module-heading"><p class="dashboard-eyebrow">ÜYELİĞİNİZ</p><h2>Aboneliğinizi kolayca yönetin</h2><p>Durumunuzu inceleyin veya satın aldığınız kodu etkinleştirin.</p></div>
             <section class="sub-panel">
                 <div class="sub-card">
                     <h2 class="section-title">Abonelik / Kod Etkinleştir</h2>
-                    <div class="sub-alert" id="subAlert" hidden></div>
+                    <div class="sub-alert" id="subAlert" role="status" hidden></div>
                     <div class="sub-info-grid">
                         <div class="sub-info-item">
                             <span class="sub-info-item__label">Abonelik Durumu</span>
@@ -321,6 +341,23 @@
                         </div>
                         <p class="sub-hint">Shopier üzerinden satın aldığınız aktivasyon kodunu buraya girin.</p>
                     </div>
+                </div>
+            </section>
+        </div>
+
+        <div class="admin-tab-panel" data-panel="account" hidden>
+            <div class="dashboard-module-heading"><p class="dashboard-eyebrow">HESAP GÜVENLİĞİ</p><h2>Hesabınızın kontrolü sizde</h2><p>Şifrenizi mevcut şifrenizle doğrulayarak güncelleyin.</p></div>
+            <section class="dashboard-account">
+                <div class="dashboard-module-card">
+                    <h2 class="section-title">Şifre Değiştir</h2>
+                    <p class="dashboard-form-hint" id="passwordGuidance">En az 8 karakter içeren bir şifre belirleyin. Yeni şifrenizi iki alana aynı şekilde yazın.</p>
+                    <form id="ownerPasswordChangeForm" autocomplete="off" aria-describedby="passwordGuidance">
+                        <div class="form-group"><label for="ownerCurrentPassword">Mevcut Şifre</label><input id="ownerCurrentPassword" name="currentPassword" type="password" required autocomplete="current-password"></div>
+                        <div class="form-group"><label for="ownerNewPassword">Yeni Şifre</label><input id="ownerNewPassword" name="newPassword" type="password" required minlength="8" autocomplete="new-password"></div>
+                        <div class="form-group"><label for="ownerConfirmPassword">Yeni Şifre (Tekrar)</label><input id="ownerConfirmPassword" name="confirmPassword" type="password" required minlength="8" autocomplete="new-password"></div>
+                        <p data-password-status role="status" aria-live="polite"></p>
+                        <button type="submit" class="btn btn-primary">Şifreyi Değiştir</button>
+                    </form>
                 </div>
             </section>
         </div>
@@ -379,5 +416,6 @@
 
     <script type="module" src="admin-auth.js"></script>
     <script type="module" src="app.js"></script>
+    <script type="module" src="admin-dashboard.js"></script>
 </body>
 </html>

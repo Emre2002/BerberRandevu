@@ -1,4 +1,4 @@
-import { updateBarber } from "./firestoreService.js";
+import { updateOwnerBarberSettings } from "./firestoreService.js";
 import {
     HOUR_SELECT_OPTIONS,
     validateWorkingHours,
@@ -65,12 +65,17 @@ export function initWorkingHoursAdmin(barberSlug, showToast, opts = {}) {
 
         saveBtn.disabled = true;
         try {
-            await updateBarber(barberSlug, { openHour, closeHour });
+            await updateOwnerBarberSettings(barberSlug, { openHour, closeHour });
             hours.openHour = openHour;
             hours.closeHour = closeHour;
             showToast("Çalışma saatleri güncellendi.");
             opts.onUpdated?.({ openHour, closeHour });
         } catch (e) {
+            if (e.code === "public_mirror_sync_failed") {
+                hours.openHour = openHour;
+                hours.closeHour = closeHour;
+                opts.onUpdated?.({ openHour, closeHour });
+            }
             showToast(e.message || "Kayıt başarısız.", "error");
         } finally {
             saveBtn.disabled = false;

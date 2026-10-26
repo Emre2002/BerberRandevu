@@ -1,20 +1,12 @@
-import { PRODUCTION_BASE_URL } from "./linkService.js";
-import { isLocalDevHost } from "./legacyAuthCompat.js";
+import { getBaseUrl } from "./linkService.js";
 
 function getApiBaseUrl() {
-    if (typeof window === "undefined") return PRODUCTION_BASE_URL;
-    if (isLocalDevHost(window.location.hostname)) {
-        return window.location.origin;
-    }
-    return PRODUCTION_BASE_URL;
+    return getBaseUrl();
 }
 
 const AVAILABILITY_MEMORY_TTL_MS = 15_000;
 const inFlightRequests = new Map();
 const memoryCache = new Map();
-let activeRequestKey = "";
-let activeRequestSequence = 0;
-let activeAbortController = null;
 
 export function buildAvailabilityRequestKey(businessSlug, date, serviceId = "") {
     return `${businessSlug}|${date}|${serviceId || "-"}`;
@@ -38,49 +30,52 @@ export function primeAvailabilityMemoryCache(businessSlug, date, data, serviceId
 export function invalidateAvailabilityMemoryCache(businessSlug, date, serviceId = "") {
     const prefix = `${businessSlug}|${date}|`;
     for (const key of [...memoryCache.keys()]) {
-        if (key.startsWith(prefix)) memoryCache.delete(key);
+        if (key.startsWith(prefix) && (!serviceId || key === buildAvailabilityRequestKey(businessSlug, date, serviceId))) {
+            memoryCache.delete(key);
+        }
     }
-    if (serviceId) {
-        memoryCache.delete(buildAvailabilityRequestKey(businessSlug, date, serviceId));
+    for (const [key, request] of inFlightRequests) {
+        if (key.startsWith(prefix) && (!serviceId || key === buildAvailabilityRequestKey(businessSlug, date, serviceId))) {
+            request.controller.abort();
+            inFlightRequests.delete(key);
+        }
     }
 }
 
 /**
  * @param {string} businessSlug
  * @param {string} date YYYY-MM-DD
- * @param {{ serviceId?: string, force?: boolean, sequence?: number }} [opts]
+ * @param {{ serviceId?: string, force?: boolean }} [opts]
  */
 export async function fetchPublicAvailability(businessSlug, date, opts = {}) {
     const serviceId = opts.serviceId || "";
     const requestKey = buildAvailabilityRequestKey(businessSlug, date, serviceId);
 
+    const current = inFlightRequests.get(requestKey);
+    if (current) {
+        if (!opts.force || current.force) return current.promise;
+        current.controller.abort();
+        inFlightRequests.delete(requestKey);
+    }
     if (!opts.force) {
         const cached = readMemoryCache(requestKey);
         if (cached) return cached;
+    } else {
+        memoryCache.delete(requestKey);
     }
 
-    if (inFlightRequests.has(requestKey)) {
-        return inFlightRequests.get(requestKey);
-    }
-
-    const sequence = Number.isFinite(opts.sequence) ? opts.sequence : ++activeRequestSequence;
-
-    if (activeRequestKey !== requestKey && activeAbortController) {
-        activeAbortController.abort();
-    }
-    activeRequestKey = requestKey;
-    activeAbortController = new AbortController();
-    const signal = activeAbortController.signal;
+    const controller = new AbortController();
+    const request = { controller, force: Boolean(opts.force), promise: null };
 
     const url = `${getApiBaseUrl()}/api/public/availability?${new URLSearchParams({
         dukkan: businessSlug,
         date
     }).toString()}`;
 
-    const promise = (async () => {
+    request.promise = (async () => {
         const response = await fetch(url, {
             method: "GET",
-            signal,
+            signal: controller.signal,
             cache: "no-store",
             headers: { Accept: "application/json" }
         });
@@ -92,18 +87,18 @@ export async function fetchPublicAvailability(businessSlug, date, opts = {}) {
             data = null;
         }
 
+        if (controller.signal.aborted || inFlightRequests.get(requestKey) !== request) {
+            const staleErr = new Error("availability_response_stale");
+            staleErr.code = "availability_response_stale";
+            throw staleErr;
+        }
+
         if (!response.ok) {
             const err = new Error(data?.message || "availability_unavailable");
             err.code = data?.error || data?.code || "availability_unavailable";
             err.status = response.status;
             err.requestId = data?.requestId || response.headers.get("x-request-id") || null;
             throw err;
-        }
-
-        if (sequence !== activeRequestSequence) {
-            const staleErr = new Error("availability_response_stale");
-            staleErr.code = "availability_response_stale";
-            throw staleErr;
         }
 
         memoryCache.set(requestKey, { ts: Date.now(), data });
@@ -116,13 +111,13 @@ export async function fetchPublicAvailability(businessSlug, date, opts = {}) {
         }
         throw err;
     }).finally(() => {
-        if (inFlightRequests.get(requestKey) === promise) {
+        if (inFlightRequests.get(requestKey) === request) {
             inFlightRequests.delete(requestKey);
         }
     });
 
-    inFlightRequests.set(requestKey, promise);
-    return promise;
+    inFlightRequests.set(requestKey, request);
+    return request.promise;
 }
 
 /**
@@ -167,10 +162,6 @@ export function mapPublicAvailabilityToDayData(apiPayload) {
     }
 
     return { appointments, blocked, dayClosed };
-}
-
-export function nextAvailabilityRequestSequence() {
-    return ++activeRequestSequence;
 }
 
 export function getAvailabilityInFlightCount() {

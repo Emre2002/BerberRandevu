@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
     <link rel="alternate icon" href="favicon.ico">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="description" content="Online berber randevu sayfası. Dükkanınızın çalışma saatleri içinde boş slotu seçin, saniyeler içinde randevunuzu oluşturun.">
     <meta name="robots" content="noindex, nofollow">
     <title>Randevu Al | Berber</title>
@@ -26,6 +26,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="booking.css">
     <style>
         .booking-honeypot {
             position: absolute;
@@ -38,15 +39,18 @@
         }
     </style>
 </head>
-<body>
+<body class="booking-page">
     <div id="bookingRoot">
         <div class="app">
             <header class="header">
+                <div class="booking-eyebrow">BERBERRANDEVU <span>·</span> ONLINE RANDEVU</div>
+                <div class="booking-header-main">
                 <div class="logo-area" id="logoArea">
                     <span class="logo-placeholder">✂️</span>
                 </div>
-                <h1 class="barber-name" id="barberName">Elite Berber</h1>
-                <p class="barber-tagline">Premium Berber Deneyimi</p>
+                <div class="booking-header-copy"><p class="barber-tagline">RANDEVUNUZU PLANLAYIN</p>
+                <h1 class="barber-name" id="barberName">İşletme yükleniyor…</h1></div>
+                </div>
             </header>
             <div class="info-grid">
                 <div class="info-card info-card--address" id="addressCard">
@@ -84,40 +88,37 @@
                 </div>
             </div>
             <section class="section">
-                <h2 class="section-title">Tarih Seçin</h2>
-                <div class="form-group"><input type="date" id="appointmentDate"></div>
+                <div class="booking-section-heading"><span class="booking-step">01</span><div><h2 class="section-title">Gününüzü seçin</h2><p>Size uygun günü belirleyin.</p></div></div>
+                <div id="bookingDateChoices" class="booking-date-choices" aria-label="Yaklaşan günler"></div>
+                <div class="form-group booking-date-native"><label for="appointmentDate">Başka bir tarih seçin</label><input type="date" id="appointmentDate"></div>
             </section>
             <section class="section">
-                <h2 class="section-title">Saat Seçin</h2>
+                <div class="booking-section-heading"><span class="booking-step">02</span><div><h2 class="section-title">Saatinizi seçin</h2><p>Uygun saatler aşağıda görünür.</p></div></div>
                 <div class="slots-legend">
                     <span class="legend-item"><span class="legend-dot legend-dot--available"></span> Boş</span>
                     <span class="legend-item"><span class="legend-dot legend-dot--booked"></span> Dolu</span>
                     <span class="legend-item"><span class="legend-dot legend-dot--closed"></span> Kapalı</span>
                     <span class="legend-item"><span class="legend-dot legend-dot--selected"></span> Seçili</span>
                 </div>
-                <div id="slotsContainer" class="slots-grid">
+                <div id="slotsContainer" class="slots-grid" aria-live="polite">
                     <div class="slots-loading">Saatler yükleniyor...</div>
                 </div>
             </section>
             <section class="section">
-                <h2 class="section-title">Randevu Bilgileri</h2>
-                <div class="form-group">
-                    <label for="customerName">Ad Soyad</label>
-                    <input type="text" id="customerName" placeholder="Örn: Ahmet Yılmaz" autocomplete="name">
-                </div>
-                <div class="form-group">
-                    <label for="customerPhone">Telefon Numarası</label>
-                    <input type="tel" id="customerPhone" placeholder="Örn: 0555 123 45 67" autocomplete="tel">
-                </div>
+                <div class="booking-section-heading"><span class="booking-step">03</span><div><h2 class="section-title">Hizmet ve bilgileriniz</h2><p>Son bir adım kaldı.</p></div></div>
                 <div class="form-group">
                     <label for="serviceSelect">Hizmet Seçimi</label>
                     <select id="serviceSelect">
                         <option value="">Hizmet seçiniz...</option>
-                        <option value="Saç Kesimi">Saç Kesimi</option>
-                        <option value="Saç + Sakal">Saç + Sakal</option>
-                        <option value="Sakal">Sakal</option>
-                        <option value="Çocuk Tıraşı">Çocuk Tıraşı</option>
                     </select>
+                </div>
+                <div class="form-group">
+                    <label for="customerName">Ad Soyad</label>
+                    <input type="text" id="customerName" placeholder="Adınız ve soyadınız" autocomplete="name">
+                </div>
+                <div class="form-group">
+                    <label for="customerPhone">Telefon Numarası</label>
+                    <input type="tel" id="customerPhone" placeholder="05XX XXX XX XX" autocomplete="tel" inputmode="tel">
                 </div>
                 <div class="form-group">
                     <label for="customerNote">Randevu Notu / Mesajınız (Opsiyonel)</label>
@@ -127,12 +128,22 @@
                     <label for="bookingHoneypot">Website</label>
                     <input type="text" id="bookingHoneypot" name="website" tabindex="-1" autocomplete="off">
                 </div>
-                <button class="btn btn-primary" id="btnBook" disabled>Randevuyu Onayla</button>
             </section>
-            <p style="text-align:center;margin-top:12px;font-size:0.8rem;">
-                <a href="index.html" style="color:var(--text-muted);">← Ana Sayfa</a>
+            <p class="booking-home-link">
+                <a href="index.html">← Ana Sayfa</a>
             </p>
         </div>
+        <aside class="booking-checkout" aria-label="Randevu özeti">
+            <div class="booking-checkout__inner">
+                <div class="booking-checkout__summary">
+                    <span class="booking-checkout__label">RANDEVU ÖZETİ</span>
+                    <strong id="bookingSummaryDate">Tarih seçin</strong>
+                    <span id="bookingSummaryTime">Saat seçin</span>
+                    <span id="bookingSummaryService">Hizmet seçin</span>
+                </div>
+                <button type="button" class="btn btn-primary" id="btnBook" disabled>Randevuyu Onayla</button>
+            </div>
+        </aside>
         <div class="toast" id="toast"></div>
     </div>
 
