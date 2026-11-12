@@ -3,8 +3,12 @@ import { requireOwnerMembership } from "../_lib/auth.js";
 import { applyCors, readJsonBody, sendError, sendJson } from "../_lib/http.js";
 import { checkRateLimit, getClientIp } from "../_lib/rate-limit.js";
 import { updateOwnerSettings, OwnerSettingsError } from "../_lib/owner-settings-core.js";
+import { handleOwnerSubscriptionActivation } from "../_lib/activation-http.js";
 
 export default async function handler(req, res) {
+    if (req.url && new URLSearchParams(req.url.split("?")[1]).get("activateSubscription") === "1") {
+        return handleOwnerSubscriptionActivation(req, res);
+    }
     applyCors(req, res);
     if (req.method === "OPTIONS") { res.statusCode = 204; res.end(); return; }
     if (req.method !== "POST") { sendError(res, 405, "method_not_allowed", "Method not allowed."); return; }

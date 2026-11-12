@@ -167,13 +167,13 @@ export function initSubscriptionAdmin(barberSlug, showToast, opts = {}) {
         }
         el.activateBtn.disabled = true;
         try {
-            const result = await activateSubscriptionCode(code, barberSlug);
+            const result = await activateSubscriptionCode(code);
             showToast("Aboneliğiniz başarıyla uzatıldı.");
             if (el.codeInput) el.codeInput.value = "";
             if (barberData) {
                 barberData.subscriptionEndDate = result.newEndDate;
                 barberData.subscriptionStatus = "active";
-                barberData.lastActivationCode = code;
+                barberData.lastActivationCode = code.toUpperCase();
             }
             applyBarberData(barberData);
             opts.onActivated?.(barberData);

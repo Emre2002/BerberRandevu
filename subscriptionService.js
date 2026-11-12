@@ -1,11 +1,4 @@
-/**
- * Abonelik durumu, grace period ve kod etkinleştirme mantığı.
- * İleride activateSubscriptionCode Cloud Functions'a taşınabilir — tek modülde izole.
- */
-import {
-    doc, getDoc, updateDoc, serverTimestamp, runTransaction
-} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-import { db } from "./firebase-config.js";
+import { activateSubscriptionCodeViaApi } from "./activationCodeService.js";
 import {
     CUSTOMER_GRACE_DAYS,
     isCustomerBookingAllowed,
@@ -14,14 +7,9 @@ import {
 } from "./publicBookingAccess.js";
 
 export { CUSTOMER_GRACE_DAYS, isCustomerBookingAllowed, calculatePublicBookingOpen, getCustomerBlockMessage };
+export { extendSubscriptionEndDate, PACKAGE_TYPES } from "./subscriptionTerms.js";
 
 export const ADMIN_GRACE_DAYS = 7;
-
-export const PACKAGE_TYPES = {
-    monthly: { label: "Aylık", durationDays: 30, prefix: "AYLIK" },
-    quarterly: { label: "3 Aylık", durationDays: 90, prefix: "3AY" },
-    yearly: { label: "Yıllık", durationDays: 365, prefix: "YIL" }
-};
 
 /** Firestore Timestamp, Date veya "YYYY-MM-DD" string → Date (gün sonu). */
 export function toEndOfDay(value) {
@@ -130,31 +118,6 @@ export function dismissSubscriptionWarning(barberSlug, subscriptionEndDate) {
     } catch { /* private mode */ }
 }
 
-/**
- * Mevcut bitiş + süre uzatma.
- * Aktif abonelik varsa mevcut bitişe eklenir; bitmişse bugünden başlar.
- */
-export function extendSubscriptionEndDate(currentEndDate, durationDays) {
-    const today = startOfToday();
-    const currentEnd = toEndOfDay(currentEndDate);
-    let base = today;
-
-    if (currentEnd && currentEnd >= today) {
-        base = new Date(currentEnd);
-        base.setHours(0, 0, 0, 0);
-        base.setDate(base.getDate() + 1);
-    }
-
-    const newEnd = new Date(base);
-    newEnd.setDate(newEnd.getDate() + durationDays - 1);
-    newEnd.setHours(23, 59, 59, 999);
-
-    const y = newEnd.getFullYear();
-    const m = String(newEnd.getMonth() + 1).padStart(2, "0");
-    const d = String(newEnd.getDate()).padStart(2, "0");
-    return `${y}-${m}-${d}`;
-}
-
 /** Berber abonelik durumu özeti. */
 export function getSubscriptionState(barber) {
     if (!barber) {
@@ -239,66 +202,4 @@ export function getAdminCalendarLockMessage() {
 
 export const SHOPIER_URL = "https://www.shopier.com/BerberRandevu";
 
-/**
- * Aktivasyon kodunu etkinleştirir.
- * Yalnızca ilgili kod dokümanı + berber dokümanı okunur (tam tarama yok).
- * Transaction ile kod tek kullanımlık garanti edilir.
- */
-export async function activateSubscriptionCode(rawCode, barberSlug) {
-    const code = String(rawCode || "").trim().toUpperCase();
-    if (!code) throw new Error("Lütfen aktivasyon kodunu girin.");
-    if (!barberSlug) throw new Error("Dükkan bilgisi bulunamadı.");
-
-    const codeRef = doc(db, "activationCodes", code);
-    const barberRef = doc(db, "berberler", barberSlug);
-
-    const result = await runTransaction(db, async (tx) => {
-        const codeSnap = await tx.get(codeRef);
-        if (!codeSnap.exists()) {
-            throw new Error("Geçersiz aktivasyon kodu.");
-        }
-
-        const codeData = codeSnap.data();
-        if (codeData.isUsed) {
-            throw new Error("Bu kod daha önce kullanılmış.");
-        }
-
-        const barberSnap = await tx.get(barberRef);
-        if (!barberSnap.exists()) {
-            throw new Error("Berber kaydı bulunamadı.");
-        }
-
-        const barber = barberSnap.data();
-        const durationDays = codeData.durationDays || PACKAGE_TYPES[codeData.packageType]?.durationDays || 30;
-        const newEndDate = extendSubscriptionEndDate(barber.subscriptionEndDate, durationDays);
-
-        tx.update(barberRef, {
-            subscriptionStatus: "active",
-            subscriptionEndDate: newEndDate,
-            lastActivationCode: code,
-            lastSubscriptionUpdate: serverTimestamp()
-        });
-
-        tx.update(codeRef, {
-            isUsed: true,
-            usedByBarberSlug: barberSlug,
-            usedAt: serverTimestamp()
-        });
-
-        return {
-            newEndDate,
-            durationDays,
-            packageType: codeData.packageType || "monthly"
-        };
-    });
-
-    try {
-        const { fetchBarber, syncPublicBarber } = await import("./firestoreService.js");
-        const updated = await fetchBarber(barberSlug);
-        if (updated) await syncPublicBarber(barberSlug, updated);
-    } catch (syncErr) {
-        console.error("[Public Mirror] Aktivasyon sonrası sync başarısız:", syncErr);
-    }
-
-    return result;
-}
+export { activateSubscriptionCodeViaApi as activateSubscriptionCode };
