@@ -15,7 +15,9 @@ const API_ROUTE_MAP = {
     createOwnerAccount: "/api/create-owner-account",
     createBusinessForSuperAdmin: "/api/create-business",
     updateOwnerSettings: "/api/owner/update-settings",
-    reviewApplication: "/api/review-application"
+    reviewApplication: "/api/review-application",
+    manageActivationCodes: "/api/update-business?activationCodes=1",
+    activateSubscription: "/api/owner/update-settings?activateSubscription=1"
 };
 
 export function shouldUsePrivilegedApi(ctx = {}) {

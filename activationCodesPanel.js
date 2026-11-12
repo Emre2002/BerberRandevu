@@ -5,7 +5,7 @@ import {
     formatCodeDate,
     packageLabel
 } from "./activationCodeService.js";
-import { PACKAGE_TYPES } from "./subscriptionService.js";
+import { PACKAGE_TYPES } from "./subscriptionTerms.js";
 
 let codesCache = [];
 let codesFilter = { used: "all", package: "all" };
@@ -14,7 +14,7 @@ let showToastFn = () => {};
 function escapeHtml(str) {
     const d = document.createElement("div");
     d.textContent = str ?? "";
-    return d.innerHTML;
+    return d.innerHTML.replaceAll('"', "&quot;");
 }
 
 function getFilteredCodes() {
@@ -52,8 +52,8 @@ function renderCodesTable() {
                <button type="button" class="sa-btn sa-btn--danger" data-ac-delete="${escapeHtml(c.code)}">Sil</button>`;
         return `
             <td class="ac-code">${escapeHtml(c.code)}</td>
-            <td>${packageLabel(c.packageType)}</td>
-            <td>${c.durationDays || "—"}</td>
+            <td>${escapeHtml(packageLabel(c.packageType))}</td>
+            <td>${escapeHtml(c.durationDays || "—")}</td>
             <td>${usedBadge}</td>
             <td>${escapeHtml(c.usedByBarberSlug || "—")}</td>
             <td>${formatCodeDate(c.createdAt)}</td>
@@ -69,8 +69,8 @@ function renderCodesTable() {
                     ${c.isUsed ? '<span class="sa-badge sa-badge--gray">Kullanıldı</span>' : '<span class="sa-badge sa-badge--green">Boş</span>'}
                 </div>
                 <div class="sad-card__grid">
-                    <div><span>Paket</span><strong>${packageLabel(c.packageType)}</strong></div>
-                    <div><span>Gün</span><strong>${c.durationDays}</strong></div>
+                    <div><span>Paket</span><strong>${escapeHtml(packageLabel(c.packageType))}</strong></div>
+                    <div><span>Gün</span><strong>${escapeHtml(c.durationDays || "—")}</strong></div>
                     <div><span>Kullanan</span><strong>${escapeHtml(c.usedByBarberSlug || "—")}</strong></div>
                 </div>
                 ${!c.isUsed ? `<div class="sad-card__actions">
@@ -101,9 +101,23 @@ function renderFilters() {
 }
 
 export async function loadActivationCodesPanel() {
-    codesCache = await fetchAllActivationCodes();
-    renderFilters();
-    renderCodesTable();
+    try {
+        codesCache = await fetchAllActivationCodes();
+        renderFilters();
+        renderCodesTable();
+    } catch (err) {
+        codesCache = [];
+        const message = err.message || "Kod havuzu yüklenemedi.";
+        const tbody = document.getElementById("acTableBody");
+        const cards = document.getElementById("acCards");
+        if (tbody) tbody.innerHTML = `<tr><td colspan="7" class="sa-table__empty">${escapeHtml(message)}</td></tr>`;
+        if (cards) cards.innerHTML = `<div class="sa-table__empty">${escapeHtml(message)}</div>`;
+        for (const id of ["acCount", "acFilters"]) {
+            const element = document.getElementById(id);
+            if (element) element.textContent = "";
+        }
+        showToastFn(message, "error");
+    }
 }
 
 export function bindActivationCodesEvents(showToast) {
@@ -137,14 +151,26 @@ export function bindActivationCodesEvents(showToast) {
         const copyBtn = e.target.closest("[data-ac-copy]");
         const delBtn = e.target.closest("[data-ac-delete]");
         if (copyBtn) {
-            await navigator.clipboard.writeText(copyBtn.dataset.acCopy);
-            showToastFn("Kod panoya kopyalandı.");
+            try {
+                await navigator.clipboard.writeText(copyBtn.dataset.acCopy);
+                showToastFn("Kod panoya kopyalandı.");
+            } catch {
+                showToastFn("Kod panoya kopyalanamadı.", "error");
+            }
         }
         if (delBtn) {
             if (!confirm("Bu kodu silmek istediğinize emin misiniz?")) return;
-            await deleteActivationCode(delBtn.dataset.acDelete);
-            showToastFn("Kod silindi.");
-            await loadActivationCodesPanel();
+            delBtn.disabled = true;
+            try {
+                await deleteActivationCode(delBtn.dataset.acDelete);
+                showToastFn("Kod silindi.");
+                await loadActivationCodesPanel();
+            } catch (err) {
+                showToastFn(err.message, "error");
+                if (err.code === "code_used") await loadActivationCodesPanel();
+            } finally {
+                delBtn.disabled = false;
+            }
         }
     }
     document.getElementById("acTableBody")?.addEventListener("click", handleAcAction);

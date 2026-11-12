@@ -17,7 +17,7 @@ export async function createMockPaymentRecord({ orderId, packageType, amount, cu
 
 /** Satılan kodu işaretle (Shopier siparişi ile eşleştirme). */
 export async function markCodeAsSold(code, shopierOrderId) {
-    console.info("[paymentService] Kod satıldı olarak işaretlendi:", { code, shopierOrderId });
+    console.info("[paymentService] Kod satıldı olarak işaretlendi:", { shopierOrderId });
     return { success: true, mock: true, code, shopierOrderId };
 }
 
@@ -26,7 +26,7 @@ export async function markCodeAsSold(code, shopierOrderId) {
  * Gerçek entegrasyonda webhook bu fonksiyonu çağırır.
  */
 export async function linkCodeToShopierOrder({ shopierOrderId, packageType, customerEmail }) {
-    const codes = await createActivationCodes({ packageType, count: 1, createdBy: "shopier" });
+    const codes = await createActivationCodes({ packageType, count: 1 });
     const code = codes[0];
     await markCodeAsSold(code, shopierOrderId);
     await createMockPaymentRecord({ orderId: shopierOrderId, packageType, customerEmail });

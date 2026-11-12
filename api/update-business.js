@@ -4,6 +4,7 @@ import { requireSuperAdmin } from "./_lib/auth.js";
 import { sanitizeBusinessForSuperAdmin } from "./_lib/business-sanitize.js";
 import { applyCors, readJsonBody, sendError, sendJson } from "./_lib/http.js";
 import { normalizeSlug } from "./_lib/normalize-slug.js";
+import { handleAdminActivationCodes } from "./_lib/activation-http.js";
 
 const ALLOWED_UPDATE_FIELDS = new Set([
     "name", "address", "city", "district", "neighborhood", "addressDetail",
@@ -35,6 +36,9 @@ function buildPublicProjection(barber, slug) {
 }
 
 export default async function handler(req, res) {
+    if (req.url && new URLSearchParams(req.url.split("?")[1]).get("activationCodes") === "1") {
+        return handleAdminActivationCodes(req, res);
+    }
     applyCors(req, res);
 
     if (req.method === "OPTIONS") {

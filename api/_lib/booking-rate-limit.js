@@ -296,7 +296,7 @@ function ipSuccessDocId(businessId, ipIdentity, requestDay) {
     return `${docPrefix()}_success_ip_${businessId}_${ipIdentity}_${requestDay}`.slice(0, 1500);
 }
 
-async function consumeCounter(db, docId, { limit, windowSeconds, type, scope, metadata = {} }) {
+export async function consumeCounter(db, docId, { limit, windowSeconds, type, scope, metadata = {} }) {
     const nowMs = Date.now();
     const windowMs = windowSeconds * 1000;
     const ref = db.collection("rateLimits").doc(docId);
